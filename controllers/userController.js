@@ -5,6 +5,7 @@ import generateToken from "../utils/generateToken.js";
 
 // USER REGISTERING CONTROLLER
 const registerUser = asyncHandler(async (req, res, next) => {
+  console.log("req body: ", req.body);
   const { email } = req.body;
 
   if (!email) {
@@ -26,7 +27,7 @@ const registerUser = asyncHandler(async (req, res, next) => {
 
   if (user) {
     res.status(200).json({
-      ID_user: user.ID_user,
+      _id: user._id,
       creation_date: user.creation_date,
       email: user.email,
     });
@@ -38,22 +39,19 @@ const registerUser = asyncHandler(async (req, res, next) => {
 
 // USER LOGIN CONTROLLER
 const loginUser = asyncHandler(async (req, res, next) => {
-  const { email, password } = req.body;
+  const { email } = req.body;
 
-  if (!email || !password) {
+  if (!email) {
     res.status(400);
     throw new Error("Please enter all the Fields");
   }
   // GETTING THE USER
   const user = await User.findOne({ email: email });
 
-  if (user && (await user.matchPassword(password))) {
+  if (user) {
     res.status(200).json({
       _id: user._id,
-      name: user.name,
       email: user.email,
-      isAdmin: user.isAdmin,
-      pic: user.pic,
       token: await generateToken(user._id),
     });
   } else {

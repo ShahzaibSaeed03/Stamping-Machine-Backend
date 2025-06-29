@@ -3,6 +3,7 @@ import colors from "colors";
 import dotenv from "dotenv";
 import connectDB from "./config/conn.js";
 import userRoutes from "./routes/userRoutes.js";
+import workRoutes from "./routes/workRoutes.js"
 import { notFound, errorHandler } from "./middlewares/errorMiddlewares.js";
 // import { protect } from "./middlewares/authMiddleware.js";
 
@@ -20,6 +21,8 @@ app.get("/", (req, res) => {
 });
 
 app.use("/api/user", userRoutes);
+app.use("/api/work", workRoutes);
+
 
 // MIDDLEWARES
 app.use(notFound);

@@ -5,10 +5,10 @@ const workSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",
     required: true,
-  },
+  }, // id of owner/client (will be pk of user)
   id_category: { type: Number }, // No referenced table shown; treat as Number or Enum
   number_for_client: { type: Number, required: true }, // starts from 1 per client
-  displayed_ID: { type: String, required: true, unique: true }, // e.g., ClientID+Date+Sequence
+  displayed_ID: { type: String, required: true, unique: true }, // e.g., ClientID + Registration Date (From table Certificate) + number_for_client (above column name)
   status: { type: Boolean, default: true }, // true = Active, false = Deleted
   title: { type: String, required: true },
   copyright_owner: { type: String, required: true },
@@ -25,3 +25,5 @@ const workSchema = new mongoose.Schema({
 });
 
 const Work = mongoose.model("Work", workSchema);
+
+export default Work;

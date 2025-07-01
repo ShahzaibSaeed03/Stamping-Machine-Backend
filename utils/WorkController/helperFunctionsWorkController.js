@@ -4,18 +4,6 @@ import PDFDocument from "pdfkit";
 import path from "path";
 import { exec } from "child_process";
 
-// VALIDATE FILE FUNCTION
-export const validateFile = (file) => {
-  const maxSize = 120 * 1024 * 1024; // 120 MB
-  const forbiddenTypes = ["application/x-msdownload", "application/javascript"];
-
-  if (!file) throw new Error("No file uploaded");
-  if (file.size > maxSize) throw new Error("File exceeds 120 MB limit");
-  if (forbiddenTypes.includes(file.mimetype)) {
-    throw new Error("We don't accept .exe or JavaScript files");
-  }
-};
-
 // SHA COMPUTE FUNCTION
 export const computeSHA256 = (filePath) => {
   return new Promise((resolve, reject) => {

@@ -17,6 +17,13 @@ const multerErrorMiddleware = (err, req, res, next) => {
       });
     }
 
+    // Handle multiple files error
+    if (err.message && err.message.includes("Unexpected field")) {
+      return res.status(400).json({
+        error: "You can only upload one .zip file at a time. Please combine your files into a single .zip archive.",
+      });
+    }
+
     // Generic multer error
     return res.status(500).json({
       error: "File upload failed: " + err.message,

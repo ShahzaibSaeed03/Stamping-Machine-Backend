@@ -14,27 +14,23 @@ import { sendConfirmationEmail } from "../utils/WorkController/sendConfirmationE
 const uploadWork = asyncHandler(async (req, res) => {
   const file = req.file;
 
-  // Process each uploaded file
-  files.forEach((file) => {
-    console.log(`Received file: ${file.originalname}, type: ${file.mimetype}`);
-    // You can apply different logic based on mimetype/extension here
-  });
+  if (!file) {
+    return res.status(400).json({
+      error: "No file uploaded. Please select a .zip file to upload.",
+    });
+  }
+
   const user = req.user; // from auth middleware
   const { workTitle, additionalOwners } = req.body;
-
-  console.log("work title: ", workTitle);
-  console.log("additionalOwners: ", additionalOwners);
-
   
+  res.status(201).json({ message: "Work uploaded and  registered" });
 
-  
+  return;
+
   // Step 2: Compute SHA256 fingerprint
   const fingerprint = await computeSHA256(file.path);
-  
-  console.log("fingerprint: ", fingerprint)
 
-  res.status(201).json({ message: "Work uploaded and registered" });
-  return;
+  
   // Step 3: Calculate work counter and generate Displayed ID
   const workCounter = await Work.countDocuments({ user: user._id });
   const displayedID = await generateDisplayedID(user.clientId, workCounter);
@@ -75,9 +71,7 @@ const uploadWork = asyncHandler(async (req, res) => {
   // Step 8: Email confirmation to user
   await sendConfirmationEmail(user.email, workTitle);
 
-  res
-    .status(201)
-    .json({ message: "Work uploaded and registered", work: workData });
+  res.status(201).json({ message: "Work uploaded and registered", work: workData });
 });
 
 export { uploadWork };

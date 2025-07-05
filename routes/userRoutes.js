@@ -4,11 +4,11 @@ import {
   loginUser,
   allUser,
 } from "../controllers/userController.js";
-import { protect } from "../middlewares/authMiddleware.js";
+import { userAuthMiddleware } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
 
-router.get("/", protect, allUser);
+router.get("/", userAuthMiddleware, allUser);
 router.route("/").post(registerUser);
 router.post("/login", loginUser);
 

@@ -13,7 +13,7 @@ const workSchema = new mongoose.Schema({
   title: { type: String, required: true },
   copyright_owner: { type: String, required: true },
   additional_copyright_owners: { type: String },
-  registration_date: { type: Date, default: Date.now },
+  registeration_date: { type: Date, default: Date.now },
   file_name: { type: String, required: true },
   file_fingerprint: { type: String, required: true },
   id_file: { type: String, required: true }, // S3 file key or link

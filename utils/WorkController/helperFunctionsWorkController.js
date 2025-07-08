@@ -3,6 +3,9 @@ import fs from "fs";
 import PDFDocument from "pdfkit";
 import path from "path";
 import { exec } from "child_process";
+import { promisify } from "util";
+
+const execAsync = promisify(exec);
 
 // SHA256 fingerprint calculation for a file (used for timestamp) Only use this for files, not directories. Throws clear errors if file is missing or not a file.
 export const computeSHA256 = (filePath) => {
@@ -117,19 +120,20 @@ export const generateCertificatePDF = ({
     stream.on("error", reject);
   });
 };
-
 // SEND TO TSA FUNCTION
-export const sendToTSA = (certificatePath) => {
-  return new Promise((resolve, reject) => {
-    const otsPath = `${certificatePath}.ots`;
-
-    exec(`ots stamp "${certificatePath}"`, (error, stdout, stderr) => {
-      if (error) return reject(error);
-
-      resolve({
-        blockInfo: "Pending (get from opentimestamps when verified)",
-        otsFilePath: otsPath,
-      });
-    });
-  });
+export const sendToTSA = async (certificatePath) => {
+  const otsPath = `${certificatePath}.ots`;
+  try {
+    // Use the Windows .cmd wrapper for the CLI
+    const { stdout, stderr } = await execAsync(`ots-cli.js.cmd stamp "${certificatePath}"`);
+    return {
+      otsFilePath: otsPath,
+      stdout,
+      stderr,
+      blockInfo: "Pending (can be updated after verification)"
+    };
+  } catch (error) {
+    console.error("TSA Error:", error);
+    throw new Error("Error executing OpenTimestamps CLI");
+  }
 };

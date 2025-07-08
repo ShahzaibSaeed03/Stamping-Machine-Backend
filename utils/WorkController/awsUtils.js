@@ -3,11 +3,14 @@ import { Upload } from '@aws-sdk/lib-storage';
 import { s3Client } from '../../config/s3Client.js';
 import fs from 'fs';
 import mime from 'mime-types';
-import path from 'path';
 
 export const uploadFileToS3 = async (localFilePath, s3Key) => {
   const fileStream = fs.createReadStream(localFilePath);
   const contentType = mime.lookup(localFilePath) || 'application/octet-stream';
+
+  if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
+    throw new Error("AWS credentials are missing in environment variables.");
+  }
 
   const uploadParams = {
     Bucket: process.env.AWS_BUCKET_NAME, // Your S3 bucket name
@@ -21,7 +24,10 @@ export const uploadFileToS3 = async (localFilePath, s3Key) => {
     params: uploadParams,
   });
 
-  await upload.done();
-
-  return `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${s3Key}`;
+  try {
+    await upload.done();
+    return `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${s3Key}`;
+  } catch (err) {
+    throw new Error("S3 Upload Error" + err);
+  }
 };

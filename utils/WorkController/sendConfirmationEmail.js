@@ -29,8 +29,6 @@ export const sendConfirmationEmail = async (email, workTitle) => {
     </p>
   `;
 
-  console.log("email: ", email)
-
   const message = {
     from: process.env.EMAIL_USER,
     to: email,

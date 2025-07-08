@@ -34,7 +34,7 @@ const uploadWork = asyncHandler(async (req, res) => {
   const fingerprint = await computeSHA256(file.path);
 
   // Step 3: Calculate work counter and generate Displayed ID
-  const workCounter = await Work.countDocuments({ user: user._id });
+  const workCounter = await Work.countDocuments({ id_client: user._id });
   const displayedID = await generateDisplayedID(user._id, workCounter); // user._id is serve as clientId
 
   // Step 3.1: Check for duplicate displayed_ID before proceeding
@@ -94,16 +94,11 @@ const uploadWork = asyncHandler(async (req, res) => {
     // id_file: s3Links.certUrl, // Get from above
   });
 
-  res.status(201).json({ message: "Work uploaded and registered", fingerprint: fingerprint, workCounter, displayedID, certificatePath, tsaData, s3Links, workCertificateData });
-  
-  return;
-
   // Step 8: Email confirmation to user
   await sendConfirmationEmail(user.email, workTitle);
 
-  res
-    .status(201)
-    .json({ message: "Work uploaded and registered", work: workData });
+  res.status(201).json({ message: "Work uploaded and registered", fingerprint: fingerprint, workCounter, displayedID, certificatePath, tsaData, s3Links, workCertificateData });
+
 });
 
 export { uploadWork };

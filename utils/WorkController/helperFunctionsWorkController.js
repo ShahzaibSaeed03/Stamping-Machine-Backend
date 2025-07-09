@@ -4,6 +4,7 @@ import PDFDocument from "pdfkit";
 import path from "path";
 import { exec } from "child_process";
 import { promisify } from "util";
+import pdfParse from "pdf-parse";
 
 const execAsync = promisify(exec);
 
@@ -137,3 +138,34 @@ export const sendToTSA = async (certificatePath) => {
     throw new Error("Error executing OpenTimestamps CLI");
   }
 };
+
+// Extract SHA256 fingerprint from certificate PDF
+/**
+ * Extracts the SHA256 fingerprint from a certificate PDF file.
+ * @param {string} pdfPath - Absolute or relative path to the PDF.
+ * @returns {Promise<string>} - The extracted SHA256 fingerprint.
+ */
+export const extractFingerprintFromPDF = async (pdfPath) => {
+  try {
+    // Ensure the file exists
+    if (!fs.existsSync(pdfPath)) {
+      throw new Error(`PDF file not found at path: ${pdfPath}`);
+    }
+
+    const dataBuffer = fs.readFileSync(pdfPath);
+    const data = await pdfParse(dataBuffer);
+
+    // Match 'File SHA256 fingerprint' line, allowing for flexible spacing
+    const match = data.text.match(/File\s+SHA256\s+fingerprint\s*:\s*([a-fA-F0-9]{64})/);
+
+    if (match && match[1]) {
+      return match[1];
+    } else {
+      throw new Error("SHA256 fingerprint not found in PDF text.");
+    }
+  } catch (error) {
+    console.error("Failed to extract fingerprint:", error.message);
+    throw new Error("Unable to extract fingerprint from certificate PDF.");
+  }
+};
+

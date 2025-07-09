@@ -1,6 +1,6 @@
 import express from "express";
-import { uploadWork } from "../controllers/workController.js";
-import {uploadMiddleware, validateSingleZipAndContents} from "../middlewares/uploadMiddleware.js";
+import { uploadWork, verifyWorkRegistration } from "../controllers/workController.js";
+import {uploadMiddleware, validateSingleZipAndContents, verifyUploadMiddleware} from "../middlewares/uploadMiddleware.js";
 import multerErrorMiddleware from "../middlewares/multerErrorHandlerMiddleware.js";
 import {userAuthMiddleware} from "../middlewares/authMiddleware.js"
 
@@ -14,6 +14,15 @@ router.post(
   multerErrorMiddleware, // To handle error
   validateSingleZipAndContents, // To check the zip file content
   uploadWork
+);
+
+// Verification route
+router.post(
+  "/verify",
+  userAuthMiddleware,
+  verifyUploadMiddleware,
+  multerErrorMiddleware,
+  verifyWorkRegistration
 );
 
 export default router;

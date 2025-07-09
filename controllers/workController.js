@@ -5,6 +5,7 @@ import {
   generateDisplayedID,
   generateCertificatePDF,
   sendToTSA,
+  extractFingerprintFromPDF,
 } from "../utils/WorkController/helperFunctionsWorkController.js";
 import { uploadToAWS } from "../utils/WorkController/uploadToAWS.js";
 import { saveToDatabase } from "../utils/WorkController/saveToDatabase.js";
@@ -101,4 +102,68 @@ const uploadWork = asyncHandler(async (req, res) => {
 
 });
 
-export { uploadWork };
+// VERIFY WORK REGISTRATION CONTROLLER
+const verifyWorkRegistration = asyncHandler(async (req, res) => {
+  // Step 1: Check all files are present
+  const files = req.files;
+  if (!files || !files.file || !files.certificate || !files.ots) {
+    return res.status(400).json({
+      error: "Please select the file to be verified, its certificate and its .ots file."
+    });
+  }
+  const filePath = files.file[0].path;
+  const certificatePath = files.certificate[0].path;
+  const otsPath = files.ots[0].path;
+
+  // Step 3: Calculate fingerprint of the file
+  let fileFingerprint;
+  try {
+    fileFingerprint = await computeSHA256(filePath);
+  } catch (err) {
+    return res.status(400).json({ error: "Failed to calculate fingerprint of the file." });
+  }
+
+  // Step 5: Extract fingerprint from certificate
+  let certFingerprint;
+  try {
+    certFingerprint = await extractFingerprintFromPDF(certificatePath);
+  } catch (err) {
+    return res.status(400).json({ error: "File doesn't match the certificate. (Fingerprint not found in certificate)" });
+  }
+
+  if (fileFingerprint !== certFingerprint) {
+    // Not the end of verification, check registration
+    // Step 7: Check if certificate is registered
+    // Find by fingerprint or by displayed_ID (if extractable)
+    const work = await Work.findOne({ file_fingerprint: fileFingerprint });
+    if (!work) {
+      return res.status(404).json({
+        error: "This certificate is not in our database."
+      });
+    }
+    // Optionally, check TSA status (simulate for now)
+    // In a real implementation, you would verify the .ots file with OpenTimestamps
+    // For now, just return a simulated response
+    return res.status(200).json({
+      message: "File doesn't match the certificate, but the certificate is registered.",
+      registration: work.TSA || "Bitcoin block yyyyyy attests the existence of your file as of DDMMYYYY HHMMSS."
+    });
+  }
+
+  // If fingerprint matches, check registration
+  const work = await Work.findOne({ file_fingerprint: fileFingerprint });
+  if (!work) {
+    return res.status(404).json({
+      error: "This certificate is not in our database."
+    });
+  }
+  // Optionally, check TSA status (simulate for now)
+  // In a real implementation, you would verify the .ots file with OpenTimestamps
+  // For now, just return a simulated response
+  return res.status(200).json({
+    message: "Verification successful.",
+    registration: work.TSA || "Bitcoin block yyyyyy attests the existence of your file as of DDMMYYYY HHMMSS."
+  });
+});
+
+export { uploadWork, verifyWorkRegistration };

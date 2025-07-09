@@ -80,4 +80,14 @@ const validateSingleZipAndContents = (req, res, next) => {
   }
 };
 
-export { uploadMiddleware, validateSingleZipAndContents };
+// Multer middleware for verification (accepts three files: file, certificate, ots)
+const verifyUploadMiddleware = multer({
+  storage,
+  limits: { fileSize: 120 * 1024 * 1024 },
+}).fields([
+  { name: 'file', maxCount: 1 },
+  { name: 'certificate', maxCount: 1 },
+  { name: 'ots', maxCount: 1 },
+]);
+
+export { uploadMiddleware, validateSingleZipAndContents, verifyUploadMiddleware };

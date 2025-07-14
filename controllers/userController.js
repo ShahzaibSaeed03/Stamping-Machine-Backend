@@ -6,11 +6,11 @@ import generateToken from "../utils/generateToken.js";
 // USER REGISTERING CONTROLLER
 const registerUser = asyncHandler(async (req, res, next) => {
   console.log("req body: ", req.body);
-  const { email, name, clientId } = req.body;
+  const { email } = req.body;
 
-  if (!email || !name || !clientId) {
+  if (!email) {
     res.status(400);
-    throw new Error("Please enter all required fields: email, name, and clientId");
+    throw new Error("Please enter all required fields: email");
   }
   // CHECKING USER EXISTENCE
   const userExist = await User.findOne({ email: email });
@@ -19,18 +19,9 @@ const registerUser = asyncHandler(async (req, res, next) => {
     throw new Error("User already Exists.");
   }
 
-  // CHECKING CLIENT ID UNIQUENESS
-  const clientIdExist = await User.findOne({ clientId: clientId });
-  if (clientIdExist) {
-    res.status(400);
-    throw new Error("Client ID already exists.");
-  }
-
   // CREATING THE USER
   const user = await User.create({
     email,
-    name,
-    clientId,
     creation_date: new Date(),
   });
 
@@ -39,8 +30,6 @@ const registerUser = asyncHandler(async (req, res, next) => {
       _id: user._id,
       creation_date: user.creation_date,
       email: user.email,
-      name: user.name,
-      clientId: user.clientId,
     });
   } else {
     res.status(400);

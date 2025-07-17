@@ -27,7 +27,7 @@ const registerUser = asyncHandler(async (req, res, next) => {
 
   if (user) {
     res.status(200).json({
-      _id: user._id,
+      id: user._id,
       creation_date: user.creation_date,
       email: user.email,
     });
@@ -50,7 +50,7 @@ const loginUser = asyncHandler(async (req, res, next) => {
 
   if (user) {
     res.status(200).json({
-      _id: user._id,
+      id: user._id,
       email: user.email,
       name: user.name,
       clientId: user.clientId,

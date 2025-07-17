@@ -12,6 +12,42 @@ import { sendConfirmationEmail } from "../utils/WorkController/sendConfirmationE
 
 import { verifyOTS, stampWithOTS } from "../utils/WorkController/otsUtil.js";
 
+// @desc    Get all works
+// @route   GET /api/works
+// @access  Private
+const getAllWorks = asyncHandler(async (req, res) => {
+  const works = await Work.find({})
+    .populate('id_client', 'name email') // Populate user info
+    .populate('id_certificate', 'certificate_name registration_date TSA') // Populate certificate info
+    .sort({ registeration_date: -1 }); // Sort by registration date, newest first
+
+  res.json({
+    success: true,
+    count: works.length,
+    data: works.map(work => ({
+      _id: work._id,
+      title: work.title,
+      copyright_owner: work.copyright_owner,
+      additional_copyright_owners: work.additional_copyright_owners,
+      displayed_ID: work.displayed_ID,
+      registration_date: work.registeration_date,
+      file_name: work.file_name,
+      status: work.status,
+      client: {
+        _id: work.id_client._id,
+        name: work.id_client.name,
+        email: work.id_client.email
+      },
+      certificate: {
+        _id: work.id_certificate._id,
+        name: work.id_certificate.certificate_name,
+        date: work.id_certificate.registration_date,
+        TSA: work.id_certificate.TSA
+      }
+    }))
+  });
+});
+
 
 // WORK CONTROLLER
 // const uploadWork = asyncHandler(async (req, res) => {
@@ -266,6 +302,7 @@ const verifyWorkRegistration = asyncHandler(async (req, res) => {
   let fileFingerprint;
   try {
     fileFingerprint = await computeSHA256(filePath);
+    console.log("fileFingerprint: ", fileFingerprint);
   } catch (err) {
     return res.status(400).json({ error: "Failed to calculate fingerprint of the file." });
   }
@@ -273,6 +310,7 @@ const verifyWorkRegistration = asyncHandler(async (req, res) => {
   let certFingerprint;
   try {
     certFingerprint = await extractFingerprintFromPDF(certificatePath);
+    console.log("certFingerprint: ", certFingerprint);
   } catch (err) {
     return res.status(400).json({ error: "File doesn't match the certificate. (Fingerprint not found in certificate)" });
   }
@@ -307,4 +345,4 @@ const verifyWorkRegistration = asyncHandler(async (req, res) => {
 });
 
 
-export { uploadWork, verifyWorkRegistration };
+export { uploadWork, verifyWorkRegistration, getAllWorks };

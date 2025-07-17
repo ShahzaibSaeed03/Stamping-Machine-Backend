@@ -26,7 +26,7 @@ def stamp_file(file_path):
 def verify_ots_file(file_path, ots_path):
     try:
         # For verification, we only need the .ots file path
-        result = subprocess.run([OTS_BIN_PATH, "verify", ots_path], capture_output=True, text=True)
+        result = subprocess.run([OTS_BIN_PATH, "--no-bitcoin", "verify", ots_path], capture_output=True, text=True)
         
         # Combine stdout and stderr for checking since ots sometimes writes to stderr
         full_output = result.stdout + result.stderr

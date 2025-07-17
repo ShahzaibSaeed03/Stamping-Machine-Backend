@@ -2,10 +2,17 @@
 import { exec } from "child_process";
 import { promisify } from "util";
 const execAsync = promisify(exec);
+import path from "path";
+import { fileURLToPath } from "url";
 
-// ✅ Full path to Python inside virtualenv
-const pythonScript = "/home/ar/Work/Projects/ShahzaidSaeed/StampingProject/ots-env/bin/python";
-const scriptPath = "/home/ar/Work/Projects/ShahzaidSaeed/StampingProject/Stamping-Machine-Backend/py_scripts/ots_handler.py";
+// __dirname replacement for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Build absolute paths dynamically
+const pythonScript = path.join(__dirname, "../../ots-env/bin/python");
+const scriptPath = path.join(__dirname, "../py_scripts/ots_handler.py");
+
 
 export const stampWithOTS = async (filePath) => {
     try {
@@ -29,7 +36,7 @@ export const verifyOTS = async (certificatePath, otsPath) => {
         // Return the result directly without additional wrapping
         return result;
     } catch (err) {
-        console.error("Verification Error:", err.stderr || err.message);
+        console.error("Verification Error:", err.stderr || err.stdout || err.message);
         return {
             status: "error",
             message: "Failed to verify .ots file",

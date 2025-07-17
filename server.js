@@ -3,7 +3,8 @@ import colors from "colors";
 import dotenv from "dotenv";
 import connectDB from "./config/conn.js";
 import userRoutes from "./routes/userRoutes.js";
-import workRoutes from "./routes/workRoutes.js"
+import workRoutes from "./routes/workRoutes.js";
+import shareRoutes from "./routes/shareRoutes.js";
 import { notFound, errorHandler } from "./middlewares/errorMiddlewares.js";
 // import { protect } from "./middlewares/authMiddleware.js";
 
@@ -20,8 +21,9 @@ app.get("/", (req, res) => {
   res.status(200).send("Welcome to Stamping App.");
 });
 
-app.use("/api/user", userRoutes);
-app.use("/api/work", workRoutes);
+app.use("/api/users", userRoutes);
+app.use("/api/works", workRoutes);
+app.use("/api/shares", shareRoutes);
 
 
 // MIDDLEWARES

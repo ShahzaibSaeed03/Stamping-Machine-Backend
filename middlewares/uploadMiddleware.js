@@ -8,8 +8,7 @@ const storage = multer.diskStorage({
     cb(null, "work-uploads/");
   },
   filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(null, uniqueSuffix + "-" + file.originalname);
+    cb(null,file.originalname);
   },
 });
 
@@ -85,7 +84,7 @@ const verifyUploadMiddleware = multer({
   storage,
   limits: { fileSize: 120 * 1024 * 1024 },
 }).fields([
-  { name: 'file', maxCount: 1 },
+  { name: 'originalFile', maxCount: 1 },
   { name: 'certificate', maxCount: 1 },
   { name: 'ots', maxCount: 1 },
 ]);

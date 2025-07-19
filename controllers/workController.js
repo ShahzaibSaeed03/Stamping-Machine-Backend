@@ -9,8 +9,9 @@ import {
 import { uploadToAWS } from "../utils/WorkController/uploadToAWS.js";
 import { saveToDatabase } from "../utils/WorkController/saveToDatabase.js";
 import { sendConfirmationEmail } from "../utils/WorkController/sendConfirmationEmail.js";
-
+import { generateSignedUrl } from "../utils/generateSignedUrl.js";
 import { verifyOTS, stampWithOTS } from "../utils/WorkController/otsUtil.js";
+
 
 // @desc    Get all works
 // @route   GET /api/works
@@ -205,21 +206,41 @@ const uploadWork = asyncHandler(async (req, res) => {
     }
   });
 
+  // ✅ Generate Signed URLs
+  const certificateUrl = await generateSignedUrl(s3Links.certUrl); 
+  const originalFileUrl = await generateSignedUrl(s3Links.fileUrl);  
+  const otsUrl = await generateSignedUrl(s3Links.otsUrl);
+
   await sendConfirmationEmail(user.email, workTitle);
 
+  // res.status(201).json({
+  //   message: "Work uploaded and registered",
+  //   fingerprint,
+  //   workCounter,
+  //   displayedID,
+  //   certificatePath,
+  //   tsaData: {
+  //     otsFilePath,
+  //     blockInfo: "Pending (can be updated after verification)"
+  //   },
+  //   s3Links,
+  //   workCertificateData
+  // });
+
   res.status(201).json({
-    message: "Work uploaded and registered",
-    fingerprint,
-    workCounter,
-    displayedID,
-    certificatePath,
-    tsaData: {
-      otsFilePath,
-      blockInfo: "Pending (can be updated after verification)"
-    },
-    s3Links,
-    workCertificateData
+    status: 'success',
+    message: "Work uploaded and registered successfully.",
+    data: {
+      displayed_id: displayedID,
+      title: workTitle,
+      registration_date: workCertificateData.registeration_date,
+      fingerprint,
+      certificate_url: certificateUrl,
+      ots_url: otsUrl,
+      original_file_url: originalFileUrl
+    }
   });
+
 });
 
 

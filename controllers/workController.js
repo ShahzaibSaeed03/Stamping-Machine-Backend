@@ -11,6 +11,8 @@ import { saveToDatabase } from "../utils/WorkController/saveToDatabase.js";
 import { sendConfirmationEmail } from "../utils/WorkController/sendConfirmationEmail.js";
 import { generateSignedUrl } from "../utils/generateSignedUrl.js";
 import { verifyOTS, stampWithOTS } from "../utils/WorkController/otsUtil.js";
+import fs from 'fs';
+import path from 'path';
 
 // @desc    Get all works
 // @route   GET /api/works
@@ -139,6 +141,63 @@ const uploadWork = asyncHandler(async (req, res) => {
 
 
 // VERIFY WORK REGISTRATION CONTROLLER
+// const verifyWorkRegistration = asyncHandler(async (req, res) => {
+//   const files = req.files;
+//   if (!files || !files.originalFile || !files.certificate || !files.ots) {
+//     return res.status(400).json({
+//       error: "Please select the file to be verified, its certificate and its .ots file."
+//     });
+//   }
+
+//   const filePath = files.originalFile[0].path;
+//   const certificatePath = files.certificate[0].path;
+//   const otsPath = files.ots[0].path;
+
+//   let fileFingerprint;
+//   try {
+//     fileFingerprint = await computeSHA256(filePath);
+//     console.log("fileFingerprint: ", fileFingerprint);
+//   } catch (err) {
+//     return res.status(400).json({ error: "Failed to calculate fingerprint of the file." });
+//   }
+
+//   let certFingerprint;
+//   try {
+//     certFingerprint = await extractFingerprintFromPDF(certificatePath);
+//     console.log("certFingerprint: ", certFingerprint);
+//   } catch (err) {
+//     return res.status(400).json({ error: "File doesn't match the certificate. (Fingerprint not found in certificate)" });
+//   }
+
+//   if (fileFingerprint !== certFingerprint) {
+//     const work = await Work.findOne({ file_fingerprint: fileFingerprint });
+//     if (!work) {
+//       return res.status(404).json({
+//         error: "This certificate is not in our database."
+//       });
+//     }
+
+//     const otsResult = await verifyOTS(certificatePath, otsPath);
+//     return res.status(200).json({
+//       message: "File doesn't match the certificate, but the certificate is registered.",
+//       otsStatus: otsResult
+//     });
+//   }
+
+//   const work = await Work.findOne({ file_fingerprint: fileFingerprint });
+//   if (!work) {
+//     return res.status(404).json({
+//       error: "This certificate is not in our database."
+//     });
+//   }
+
+//   const otsResult = await verifyOTS(certificatePath, otsPath);
+//   return res.status(200).json({
+//     message: "Verification successful.",
+//     otsStatus: otsResult
+//   });
+// });
+
 const verifyWorkRegistration = asyncHandler(async (req, res) => {
   const files = req.files;
   if (!files || !files.originalFile || !files.certificate || !files.ots) {
@@ -147,23 +206,40 @@ const verifyWorkRegistration = asyncHandler(async (req, res) => {
     });
   }
 
+  // Get original paths
   const filePath = files.originalFile[0].path;
   const certificatePath = files.certificate[0].path;
   const otsPath = files.ots[0].path;
 
+  // Get base names without any extensions
+  const certBaseName = path.basename(certificatePath).split('.')[0];
+  const otsBaseName = path.basename(otsPath).split('.')[0];
+
+  // Create new paths with correct extensions
+  const newCertPath = path.join(path.dirname(certificatePath), `${certBaseName}.pdf`);
+  const newOtsPath = path.join(path.dirname(otsPath), `${otsBaseName}.pdf.ots`);
+
+  // Rename files if they don't already have the correct extensions
+  if (certificatePath !== newCertPath) {
+    fs.renameSync(certificatePath, newCertPath);
+  }
+  if (otsPath !== newOtsPath) {
+    fs.renameSync(otsPath, newOtsPath);
+  }
+
   let fileFingerprint;
   try {
     fileFingerprint = await computeSHA256(filePath);
-    console.log("fileFingerprint: ", fileFingerprint);
   } catch (err) {
+    console.error("Error computing file fingerprint:", err);
     return res.status(400).json({ error: "Failed to calculate fingerprint of the file." });
   }
 
   let certFingerprint;
   try {
-    certFingerprint = await extractFingerprintFromPDF(certificatePath);
-    console.log("certFingerprint: ", certFingerprint);
+    certFingerprint = await extractFingerprintFromPDF(newCertPath);
   } catch (err) {
+    console.error("Error extracting fingerprint from PDF:", err);
     return res.status(400).json({ error: "File doesn't match the certificate. (Fingerprint not found in certificate)" });
   }
 
@@ -175,7 +251,7 @@ const verifyWorkRegistration = asyncHandler(async (req, res) => {
       });
     }
 
-    const otsResult = await verifyOTS(certificatePath, otsPath);
+    const otsResult = await verifyOTS(newCertPath, newOtsPath);
     return res.status(200).json({
       message: "File doesn't match the certificate, but the certificate is registered.",
       otsStatus: otsResult
@@ -189,7 +265,17 @@ const verifyWorkRegistration = asyncHandler(async (req, res) => {
     });
   }
 
-  const otsResult = await verifyOTS(certificatePath, otsPath);
+  const otsResult = await verifyOTS(newCertPath, newOtsPath);
+  
+  // Clean up temporary files after verification
+  try {
+    fs.unlinkSync(newCertPath);
+    fs.unlinkSync(newOtsPath);
+    fs.unlinkSync(filePath);
+  } catch (err) {
+    console.error("Error cleaning up temporary files:", err);
+  }
+
   return res.status(200).json({
     message: "Verification successful.",
     otsStatus: otsResult

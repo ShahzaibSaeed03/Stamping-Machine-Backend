@@ -11,7 +11,7 @@ const __dirname = path.dirname(__filename);
 
 // Build absolute paths dynamically
 const pythonScript = path.join(__dirname, "../../ots-env/bin/python");
-const scriptPath = path.join(__dirname, "../py_scripts/ots_handler.py");
+const scriptPath = path.join(__dirname, "../../py_scripts/ots_handler.py");
 
 
 export const stampWithOTS = async (filePath) => {

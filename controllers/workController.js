@@ -282,5 +282,57 @@ const verifyWorkRegistration = asyncHandler(async (req, res) => {
   });
 });
 
+// @desc    Get works for a specific user
+// @route   GET /api/works/user/:userId
+// @access  Private
+const getWorksByUser = asyncHandler(async (req, res) => {
+  const { userId } = req.params;
+  
+  // Check if the user is requesting their own works or if they have admin privileges
+  if (req.user._id.toString() !== userId && req.user.role !== 'admin') {
+    return res.status(403).json({
+      success: false,
+      error: "You can only view your own works"
+    });
+  }
 
-export { uploadWork, verifyWorkRegistration, getAllWorks };
+  const works = await Work.find({ id_client: userId, status: true })
+    .populate('id_client', 'name email')
+    .populate('id_certificate', 'certificate_name registration_date TSA')
+    .sort({ registeration_date: -1 });
+
+  if (!works || works.length === 0) {
+    return res.status(404).json({
+      success: false,
+      error: "No works found for this user"
+    });
+  }
+
+  res.json({
+    success: true,
+    count: works.length,
+    data: works.map(work => ({
+      _id: work._id,
+      title: work.title,
+      copyright_owner: work.copyright_owner,
+      additional_copyright_owners: work.additional_copyright_owners,
+      displayed_ID: work.displayed_ID,
+      registration_date: work.registeration_date,
+      file_name: work.file_name,
+      status: work.status,
+      client: {
+        _id: work.id_client._id,
+        name: work.id_client.name,
+        email: work.id_client.email
+      },
+      certificate: {
+        _id: work.id_certificate._id,
+        name: work.id_certificate.certificate_name,
+        date: work.id_certificate.registration_date,
+        TSA: work.id_certificate.TSA
+      }
+    }))
+  });
+});
+
+export { uploadWork, verifyWorkRegistration, getAllWorks, getWorksByUser };

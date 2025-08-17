@@ -16,12 +16,9 @@ const port = process.env.PORT || 5000;
 
 // CORS configuration
 const corsOptions = {
-  origin: [
-    'http://localhost:4200',
-    'http://localhost:4100'
-  ],
+  origin: ["http://localhost:4200", "http://localhost:4100"],
   credentials: true,
-  optionsSuccessStatus: 200
+  optionsSuccessStatus: 200,
 };
 
 app.use(cors(corsOptions));
@@ -36,11 +33,10 @@ app.use("/api/users", userRoutes);
 app.use("/api/works", workRoutes);
 app.use("/api/shares", shareRoutes);
 
-
 // MIDDLEWARES
 app.use(notFound);
-app.use(errorHandler); 
+app.use(errorHandler);
 
 app.listen(port, () => {
-  console.log(`Server is running on http://localhost:${port}`.magenta.bold);
+  console.log(`Server running on http://localhost:${port}`.magenta.bold);
 });

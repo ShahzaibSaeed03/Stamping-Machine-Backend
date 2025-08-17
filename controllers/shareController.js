@@ -22,7 +22,7 @@ const createShareLink = asyncHandler(async (req, res) => {
   }
 
   // Generate a secure random string for the share link
-  const sha256_string = crypto.randomBytes(32).toString('hex');
+  const sha256_string = crypto.randomBytes(32).toString("hex");
 
   // Calculate expiry date
   // const end_date = new Date();
@@ -34,14 +34,14 @@ const createShareLink = asyncHandler(async (req, res) => {
   const sharedWork = await SharedWork.create({
     id_work: workId,
     end_date,
-    sha256_string
+    sha256_string,
   });
 
   res.status(201).json({
     id: sharedWork._id,
     message: "Share link created successfully",
     shareUrl: `${process.env.FRONTEND_URL}/shared/${sha256_string}`,
-    expiryDate: end_date
+    expiryDate: end_date,
   });
 });
 
@@ -51,12 +51,12 @@ const getSharedWork = asyncHandler(async (req, res) => {
 
   // Find the share record
   const sharedWork = await SharedWork.findOne({
-    sha256_string: shareId
+    sha256_string: shareId,
   }).populate({
-    path: 'id_work',
+    path: "id_work",
     populate: {
-      path: 'id_certificate'  // Populate the certificate reference to get its id_file
-    }
+      path: "id_certificate", // Populate the certificate reference to get its id_file
+    },
   });
 
   if (!sharedWork) {
@@ -66,7 +66,9 @@ const getSharedWork = asyncHandler(async (req, res) => {
 
   // Generate signed URLs for both the work file and certificate
   const fileSignedUrl = await generateSignedUrl(sharedWork.id_work.id_file);
-  const certificateSignedUrl = await generateSignedUrl(sharedWork.id_work.id_certificate.id_file);
+  const certificateSignedUrl = await generateSignedUrl(
+    sharedWork.id_work.id_certificate.id_file
+  );
 
   res.json({
     success: true,
@@ -75,7 +77,7 @@ const getSharedWork = asyncHandler(async (req, res) => {
       file_name: sharedWork.id_work.file_name,
       downloadUrl: fileSignedUrl,
       certificateUrl: certificateSignedUrl,
-    }
+    },
   });
 });
 
@@ -94,15 +96,15 @@ const listWorkShares = asyncHandler(async (req, res) => {
   // Get all active shares
   const shares = await SharedWork.find({
     id_work: workId,
-    end_date: { $gt: new Date() }
+    end_date: { $gt: new Date() },
   });
 
   res.json({
-    shares: shares.map(share => ({
+    shares: shares.map((share) => ({
       id: share._id,
       shareUrl: `${process.env.FRONTEND_URL}/shared/${share.sha256_string}`,
-      expiryDate: share.end_date
-    }))
+      expiryDate: share.end_date,
+    })),
   });
 });
 
@@ -111,9 +113,7 @@ const deleteShare = asyncHandler(async (req, res) => {
   const { shareId } = req.params;
   const user = req.user;
 
-  console.log("shareId: ", shareId);
-  console.log("user: ", user);
-  const share = await SharedWork.findById(shareId).populate('id_work');
+  const share = await SharedWork.findById(shareId).populate("id_work");
 
   if (!share) {
     res.status(404);
@@ -131,4 +131,4 @@ const deleteShare = asyncHandler(async (req, res) => {
   res.json({ message: "Share deleted successfully" });
 });
 
-export { createShareLink, getSharedWork, listWorkShares, deleteShare }; 
+export { createShareLink, getSharedWork, listWorkShares, deleteShare };

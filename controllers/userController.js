@@ -5,7 +5,6 @@ import generateToken from "../utils/generateToken.js";
 
 // USER REGISTERING CONTROLLER
 const registerUser = asyncHandler(async (req, res, next) => {
-  console.log("req body: ", req.body);
   const { email } = req.body;
 
   if (!email) {

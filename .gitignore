@@ -7,22 +7,23 @@ logs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+debug.log
 
 # Environment variables
 .env
-.env.*  # for multiple environments like .env.development, .env.production
+.env.*  # For multiple environments like .env.development
 
-# OS-specific
-.DS_Store  # macOS
-Thumbs.db  # Windows
+# OS-specific files
+.DS_Store
+Thumbs.db
 
-# IDEs
+# IDE/editor folders
 .vscode/
 .idea/
 *.sublime-workspace
 *.sublime-project
 
-# Coverage / testing
+# Test and coverage
 coverage/
 .nyc_output/
 
@@ -30,11 +31,29 @@ coverage/
 dist/
 build/
 
-# PM2 process file
+# Python virtual environment
+ots-env/
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Uploaded and generated files
+work-uploads/
+certificates/
+
+# PM2 files
 pids/
 *.pid
 *.seed
 
-# Others
+# Backup or compressed files
 *.tgz
-debug.log
+*.zip
+*.tar
+*.gz
+
+# Private keys
+*.pem

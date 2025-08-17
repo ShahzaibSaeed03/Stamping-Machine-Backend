@@ -18,7 +18,8 @@ const port = process.env.PORT || 5000;
 const corsOptions = {
   origin: [
     'http://localhost:4200',
-    'http://localhost:4100'
+    'http://localhost:4100',
+    'https://mycopyrightally.com'
   ],
   credentials: true,
   optionsSuccessStatus: 200

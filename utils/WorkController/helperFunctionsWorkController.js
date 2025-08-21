@@ -13,6 +13,13 @@ import {
   checkPDFHealth,
 } from "./pdfUtils.js";
 
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const backgroundImagePath = path.join(__dirname, "../../assets/Certif.png");
+
 const execAsync = promisify(exec);
 
 // Simple logging helper based on environment
@@ -80,11 +87,13 @@ export const generateDisplayedID = async (clientId, workCounter) => {
 // GENERATE CERTIFICATE PDF FUNCTION
 export const generateCertificatePDF = ({
   workTitle,
+  copyrightOwner,
   user,
   additionalOwners,
   displayedID,
   fingerprint,
   originalFileName,
+  originalFileUrl,
 }) => {
   return new Promise((resolve, reject) => {
     const certificatesDir = path.join(process.cwd(), "certificates");
@@ -96,71 +105,103 @@ export const generateCertificatePDF = ({
     const stream = fs.createWriteStream(outputPath);
     doc.pipe(stream);
 
-    // Helper for key-value rows with spacing and wrapping
+    // Add background image
+    try {
+      if (fs.existsSync(backgroundImagePath)) {
+        doc.image(backgroundImagePath, 0, 0, {
+          width: doc.page.width,
+          height: doc.page.height,
+        });
+      }
+    } catch (error) {
+      console.error(`Error adding background image: ${error.message}`);
+    }
+
+    // Helper for key-value rows
     const rowSpacing = 18;
-    const keyWidth = 200; // px
-    let y = doc.y;
-    const fontSize = 14;
+    const keyWidth = 200;
+    let y = 200; // push below header
+    const fontSize = 12;
+    const leftMargin = 40; // shifted left
+    const contentWidth = 480; // safe area inside page
+
     doc.fontSize(fontSize);
 
     function drawRow(key, value) {
-      doc.font("Helvetica-Bold").text(key + " : ", 50, y, { continued: true });
+      doc
+        .font("Helvetica-Bold")
+        .text(key + " : ", leftMargin, y, { continued: true });
       doc.font("Helvetica").text(value, doc.x, y, {
-        width: 500 - keyWidth,
+        width: contentWidth - keyWidth,
         align: "left",
-        indent: 0,
-        continued: false,
       });
       y = doc.y + rowSpacing;
-      doc.moveDown(0.2);
     }
 
-    // Title
+    function drawLinkRow(key, text, url) {
+      doc
+        .font("Helvetica-Bold")
+        .text(key + " : ", leftMargin, y, { continued: true });
+      doc.fillColor("blue").text(text, doc.x, y, {
+        width: contentWidth - keyWidth,
+        align: "left",
+        underline: true,
+        link: url,
+      });
+      doc.fillColor("black");
+      y = doc.y + rowSpacing;
+    }
+
+    // Title inside certificate
     doc
       .font("Helvetica")
       .fontSize(fontSize + 2)
-      .text("The file below is copyrighted:", 50, y);
+      .text("The file below is copyrighted:", leftMargin, y);
     y = doc.y + rowSpacing * 1.5;
-    doc.fontSize(fontSize);
 
-    // Work Title
+    // Content rows
     drawRow("Work Title", workTitle);
-    // Copyright Owner
-    drawRow("Copyright Owner", user.name);
-    // Additional Owners (if present)
+    drawRow("Copyright Owner", copyrightOwner || user.name);
+
     if (
       additionalOwners &&
       additionalOwners.trim() &&
       additionalOwners !== "[]"
     ) {
-      // Try to parse as JSON array, fallback to string
       let ownersStr = additionalOwners;
       try {
         const arr = JSON.parse(additionalOwners);
-        if (Array.isArray(arr)) {
-          ownersStr = arr.join(", ");
-        }
-      } catch {
-        // Not JSON, use as is
-      }
+        if (Array.isArray(arr)) ownersStr = arr.join(", ");
+      } catch {}
       drawRow("Additional Copyright Owners", ownersStr);
     }
-    // Reference number
+
     drawRow("Reference number", displayedID);
-    // Registration Date
     drawRow("Registration Date", new Date().toLocaleString());
-    // Timestamping Authority
     drawRow("Timestamping Authority", "Open Timestamps");
-    // Copyrighted File name
-    drawRow("Copyrighted File name", originalFileName);
-    // File SHA256 fingerprint
-    drawRow("File SHA256 fingerprint", fingerprint);
+
+    if (originalFileUrl) {
+      drawLinkRow("Copyrighted File name", originalFileName, originalFileUrl);
+    } else {
+      drawRow("Copyrighted File name", originalFileName);
+    }
+
+    // SHA fingerprint with wrapping
+    doc
+      .font("Helvetica-Bold")
+      .text("File SHA256 fingerprint : ", leftMargin, y, { continued: true });
+    doc.font("Helvetica").text(fingerprint, doc.x, y, {
+      width: contentWidth,
+      align: "left",
+    });
+    y = doc.y + rowSpacing;
 
     doc.end();
     stream.on("finish", () => resolve(outputPath));
     stream.on("error", reject);
   });
 };
+
 // SEND TO TSA FUNCTION
 export const sendToTSA = async (certificatePath) => {
   const otsPath = `${certificatePath}.ots`;
@@ -350,42 +391,18 @@ export const extractFingerprintFromPDF = async (
       throw new Error(`PDF file not found at path: ${pdfPath}`);
     }
 
-    if (FINGERPRINT_EXTRACTION_CONFIG.enableDetailedLogging) {
-      log(`Attempting to extract fingerprint from: ${pdfPath}`);
-    }
+    const dataBuffer = fs.readFileSync(pdfPath);
+    const data = await pdfParse(dataBuffer);
 
-    // Try all strategies in order with retry mechanism
-    const strategies = [
-      extractWithPdfParse,
-      extractWithPdfParseOptions,
-      extractAsTextFile,
-      extractWithRepair,
-      extractWithUtilities,
-    ];
+    // Match 'File SHA256 fingerprint' line, allowing for flexible spacing
+    const match = data.text.match(
+      /File\s+SHA256\s+fingerprint\s*:\s*([a-fA-F0-9]{64})/
+    );
 
-    for (let i = 0; i < strategies.length; i++) {
-      try {
-        if (FINGERPRINT_EXTRACTION_CONFIG.enableDetailedLogging) {
-          log(`Trying strategy ${i + 1}: ${strategies[i].name}`);
-        }
-        const result = await retryWithBackoff(strategies[i]);
-        if (FINGERPRINT_EXTRACTION_CONFIG.enableDetailedLogging) {
-          log(`Successfully extracted fingerprint using strategy ${i + 1}`);
-        }
-        return result;
-      } catch (error) {
-        if (FINGERPRINT_EXTRACTION_CONFIG.enableDetailedLogging) {
-          log(`Strategy ${i + 1} failed: ${error.message}`);
-        }
-        if (i === strategies.length - 1) {
-          // All strategies failed
-          throw new Error(
-            `All fingerprint extraction strategies failed. Last error: ${error.message}`
-          );
-        }
-        // Continue to next strategy
-        continue;
-      }
+    if (match && match[1]) {
+      return match[1];
+    } else {
+      throw new Error("SHA256 fingerprint not found in PDF text.");
     }
   } catch (error) {
     console.error(

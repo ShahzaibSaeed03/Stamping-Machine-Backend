@@ -7,6 +7,7 @@ import {
   extractFingerprintFromPDF,
 } from "../utils/WorkController/helperFunctionsWorkController.js";
 import { uploadToAWS } from "../utils/WorkController/uploadToAWS.js";
+import { uploadToS3 } from "../utils/WorkController/awsUtils.js";
 import { saveToDatabase } from "../utils/WorkController/saveToDatabase.js";
 import { sendConfirmationEmail } from "../utils/WorkController/sendConfirmationEmail.js";
 import { generateSignedUrl } from "../utils/generateSignedUrl.js";
@@ -76,6 +77,19 @@ const uploadWork = asyncHandler(async (req, res) => {
     });
   }
 
+  // First upload the original file to get its permanent URL for the certificate
+  let originalFileUrl;
+  try {
+    originalFileUrl = await uploadToS3(
+      { path: file.path, originalname: file.originalname },
+      "files"
+    );
+  } catch (err) {
+    return res
+      .status(500)
+      .json({ error: "Failed to upload original file to AWS" });
+  }
+
   const certificatePath = await generateCertificatePDF({
     workTitle,
     copyrightOwner,
@@ -84,6 +98,7 @@ const uploadWork = asyncHandler(async (req, res) => {
     displayedID,
     fingerprint,
     originalFileName: file.originalname,
+    originalFileUrl,
   });
 
   // 🔐 Step: Create OTS file using Python-based stamping
@@ -125,7 +140,7 @@ const uploadWork = asyncHandler(async (req, res) => {
 
   // ✅ Generate Signed URLs
   const certificateUrl = await generateSignedUrl(s3Links.certUrl);
-  const originalFileUrl = await generateSignedUrl(s3Links.fileUrl);
+  const signedOriginalFileUrl = await generateSignedUrl(s3Links.fileUrl);
   const otsUrl = await generateSignedUrl(s3Links.otsUrl);
 
   await sendConfirmationEmail(user.email, workTitle);
@@ -154,7 +169,7 @@ const uploadWork = asyncHandler(async (req, res) => {
       fingerprint,
       certificate_url: certificateUrl,
       ots_url: otsUrl,
-      original_file_url: originalFileUrl,
+      original_file_url: signedOriginalFileUrl,
     },
   });
 });
@@ -271,25 +286,9 @@ const verifyWorkRegistration = asyncHandler(async (req, res) => {
     }
   } catch (err) {
     console.error("Error extracting fingerprint from PDF:", err);
-
-    // Provide more specific error messages based on the error type
-    let errorMessage = "Failed to extract fingerprint from certificate PDF.";
-
-    if (err.message.includes("All fingerprint extraction strategies failed")) {
-      errorMessage =
-        "Certificate PDF appears to be corrupted or unreadable. Please ensure the certificate file is valid.";
-    } else if (err.message.includes("SHA256 fingerprint not found")) {
-      errorMessage =
-        "Fingerprint not found in certificate. The certificate may be malformed.";
-    } else if (err.message.includes("PDF file not found")) {
-      errorMessage = "Certificate file not found. Please check the file path.";
-    }
-
     return res.status(400).json({
-      error: errorMessage,
-      details: err.message,
-      suggestion:
-        "Please try uploading the certificate again or contact support if the issue persists.",
+      error:
+        "File doesn't match the certificate. (Fingerprint not found in certificate)",
     });
   }
 

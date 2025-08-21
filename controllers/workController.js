@@ -61,8 +61,8 @@ const uploadWork = asyncHandler(async (req, res) => {
   }
 
   const user = req.user;
-  const { workTitle, copyrightOwner, additionalOwners, owner } = req.body;
-  if (!workTitle || !copyrightOwner || !additionalOwners || !owner) {
+  const { workTitle, copyrightOwner, additionalOwners } = req.body;
+  if (!workTitle || !copyrightOwner || !additionalOwners) {
     return res.status(400).json({ error: "Please fill in all fields." });
   }
 
@@ -98,7 +98,6 @@ const uploadWork = asyncHandler(async (req, res) => {
     displayedID,
     fingerprint,
     originalFileName: file.originalname,
-    owner,
     originalFileUrl,
   });
 

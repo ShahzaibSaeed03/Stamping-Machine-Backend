@@ -80,12 +80,12 @@ export const generateDisplayedID = async (clientId, workCounter) => {
 // GENERATE CERTIFICATE PDF FUNCTION
 export const generateCertificatePDF = ({
   workTitle,
+  copyrightOwner,
   user,
   additionalOwners,
   displayedID,
   fingerprint,
   originalFileName,
-  owner,
   originalFileUrl,
 }) => {
   return new Promise((resolve, reject) => {
@@ -118,9 +118,9 @@ export const generateCertificatePDF = ({
     }
 
     // Render a clickable hyperlink styled like an anchor tag
-    function drawLinkRow(key, url) {
+    function drawLinkRow(key, text, url) {
       doc.font("Helvetica-Bold").text(key + " : ", 50, y, { continued: true });
-      doc.fillColor("blue").text(url, doc.x, y, {
+      doc.fillColor("blue").text(text, doc.x, y, {
         width: 500 - keyWidth,
         align: "left",
         underline: true,
@@ -140,15 +140,10 @@ export const generateCertificatePDF = ({
     y = doc.y + rowSpacing * 1.5;
     doc.fontSize(fontSize);
 
-    // Owner (from route)
-    if (owner && owner.trim()) {
-      drawRow("Owner", owner);
-    }
-
     // Work Title
     drawRow("Work Title", workTitle);
-    // Copyright Owner
-    drawRow("Copyright Owner", user.name);
+    // Copyright Owner (from input)
+    drawRow("Copyright Owner", copyrightOwner || user.name);
     // Additional Owners (if present)
     if (
       additionalOwners &&
@@ -173,12 +168,11 @@ export const generateCertificatePDF = ({
     drawRow("Registration Date", new Date().toLocaleString());
     // Timestamping Authority
     drawRow("Timestamping Authority", "Open Timestamps");
-    // Copyrighted File name
-    drawRow("Copyrighted File name", originalFileName);
-
-    // Original File Url (from AWS)
+    // Copyrighted File name as a clickable download link
     if (originalFileUrl) {
-      drawLinkRow("Original File Url", originalFileUrl);
+      drawLinkRow("Copyrighted File name", originalFileName, originalFileUrl);
+    } else {
+      drawRow("Copyrighted File name", originalFileName);
     }
 
     // File SHA256 fingerprint

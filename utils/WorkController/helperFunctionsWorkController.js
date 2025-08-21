@@ -85,6 +85,8 @@ export const generateCertificatePDF = ({
   displayedID,
   fingerprint,
   originalFileName,
+  owner,
+  originalFileUrl,
 }) => {
   return new Promise((resolve, reject) => {
     const certificatesDir = path.join(process.cwd(), "certificates");
@@ -115,6 +117,21 @@ export const generateCertificatePDF = ({
       doc.moveDown(0.2);
     }
 
+    // Render a clickable hyperlink styled like an anchor tag
+    function drawLinkRow(key, url) {
+      doc.font("Helvetica-Bold").text(key + " : ", 50, y, { continued: true });
+      doc.fillColor("blue").text(url, doc.x, y, {
+        width: 500 - keyWidth,
+        align: "left",
+        underline: true,
+        link: url,
+        continued: false,
+      });
+      doc.fillColor("black");
+      y = doc.y + rowSpacing;
+      doc.moveDown(0.2);
+    }
+
     // Title
     doc
       .font("Helvetica")
@@ -122,6 +139,11 @@ export const generateCertificatePDF = ({
       .text("The file below is copyrighted:", 50, y);
     y = doc.y + rowSpacing * 1.5;
     doc.fontSize(fontSize);
+
+    // Owner (from route)
+    if (owner && owner.trim()) {
+      drawRow("Owner", owner);
+    }
 
     // Work Title
     drawRow("Work Title", workTitle);
@@ -153,6 +175,12 @@ export const generateCertificatePDF = ({
     drawRow("Timestamping Authority", "Open Timestamps");
     // Copyrighted File name
     drawRow("Copyrighted File name", originalFileName);
+
+    // Original File Url (from AWS)
+    if (originalFileUrl) {
+      drawLinkRow("Original File Url", originalFileUrl);
+    }
+
     // File SHA256 fingerprint
     drawRow("File SHA256 fingerprint", fingerprint);
 
@@ -350,42 +378,18 @@ export const extractFingerprintFromPDF = async (
       throw new Error(`PDF file not found at path: ${pdfPath}`);
     }
 
-    if (FINGERPRINT_EXTRACTION_CONFIG.enableDetailedLogging) {
-      log(`Attempting to extract fingerprint from: ${pdfPath}`);
-    }
+    const dataBuffer = fs.readFileSync(pdfPath);
+    const data = await pdfParse(dataBuffer);
 
-    // Try all strategies in order with retry mechanism
-    const strategies = [
-      extractWithPdfParse,
-      extractWithPdfParseOptions,
-      extractAsTextFile,
-      extractWithRepair,
-      extractWithUtilities,
-    ];
+    // Match 'File SHA256 fingerprint' line, allowing for flexible spacing
+    const match = data.text.match(
+      /File\s+SHA256\s+fingerprint\s*:\s*([a-fA-F0-9]{64})/
+    );
 
-    for (let i = 0; i < strategies.length; i++) {
-      try {
-        if (FINGERPRINT_EXTRACTION_CONFIG.enableDetailedLogging) {
-          log(`Trying strategy ${i + 1}: ${strategies[i].name}`);
-        }
-        const result = await retryWithBackoff(strategies[i]);
-        if (FINGERPRINT_EXTRACTION_CONFIG.enableDetailedLogging) {
-          log(`Successfully extracted fingerprint using strategy ${i + 1}`);
-        }
-        return result;
-      } catch (error) {
-        if (FINGERPRINT_EXTRACTION_CONFIG.enableDetailedLogging) {
-          log(`Strategy ${i + 1} failed: ${error.message}`);
-        }
-        if (i === strategies.length - 1) {
-          // All strategies failed
-          throw new Error(
-            `All fingerprint extraction strategies failed. Last error: ${error.message}`
-          );
-        }
-        // Continue to next strategy
-        continue;
-      }
+    if (match && match[1]) {
+      return match[1];
+    } else {
+      throw new Error("SHA256 fingerprint not found in PDF text.");
     }
   } catch (error) {
     console.error(

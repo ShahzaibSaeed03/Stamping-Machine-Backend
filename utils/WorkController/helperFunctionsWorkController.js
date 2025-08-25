@@ -119,7 +119,7 @@ export const generateCertificatePDF = ({
 
     // Helper for key-value rows
     const rowSpacing = 18;
-    const keyWidth = 200;
+    const keyWidth = 175;
     let y = 200; // push below header
     const fontSize = 12;
     const leftMargin = 40; // shifted left
@@ -128,35 +128,50 @@ export const generateCertificatePDF = ({
     doc.fontSize(fontSize);
 
     function drawRow(key, value) {
+      // Draw the key in a fixed-width column
       doc
         .font("Helvetica-Bold")
-        .text(key + " : ", leftMargin, y, { continued: true });
-      doc.font("Helvetica").text(value, doc.x, y, {
-        width: contentWidth - keyWidth,
-        align: "left",
-      });
+        .text(key + " :", leftMargin, y, {
+          width: keyWidth,
+          continued: false,
+          align: "left",
+        });
+
+      // Draw the value aligned next to the key column
+      doc
+        .font("Helvetica")
+        .text(value, leftMargin + keyWidth + 10, y, {
+          width: contentWidth - keyWidth,
+          align: "left",
+        });
+
       y = doc.y + rowSpacing;
     }
 
     function drawLinkRow(key, text, url) {
-      // key in bold
+      // Key
       doc
         .font("Helvetica-Bold")
-        .text(key + " : ", leftMargin, y, { continued: true });
-    
-      // link text in normal font
+        .text(key + " :", leftMargin, y, {
+          width: keyWidth,
+          continued: false,
+          align: "left",
+        });
+
+      // Value as link
       doc
         .font("Helvetica")
         .fillColor("black")
-        .text(text, doc.x, y, {
+        .text(text, leftMargin + keyWidth + 10, y, {
           width: contentWidth - keyWidth,
           align: "left",
           link: url,
         });
-    
-      doc.fillColor("black"); // reset fill
+
+      doc.fillColor("black");
       y = doc.y + rowSpacing;
-    }    
+    }
+
 
     // Title inside certificate
     doc
@@ -178,8 +193,10 @@ export const generateCertificatePDF = ({
       try {
         const arr = JSON.parse(additionalOwners);
         if (Array.isArray(arr)) ownersStr = arr.join(", ");
-      } catch {}
+      } catch { }
       drawRow("Additional Copyright Owners", ownersStr);
+      // Extra spacing after this row
+      y += rowSpacing;  // 👈 adds one blank line
     }
 
     drawRow("Reference number", displayedID);
@@ -193,14 +210,24 @@ export const generateCertificatePDF = ({
     }
 
     // SHA fingerprint with wrapping
+    // SHA fingerprint with aligned key + wrapped value
     doc
       .font("Helvetica-Bold")
-      .text("File SHA256 fingerprint : ", leftMargin, y, { continued: true });
-    doc.font("Helvetica").text(fingerprint, doc.x, y, {
-      width: contentWidth,
-      align: "left",
-    });
+      .text("File SHA256 fingerprint :", leftMargin, y, {
+        width: keyWidth,
+        continued: false,
+        align: "left",
+      });
+
+    doc
+      .font("Helvetica")
+      .text(fingerprint, leftMargin + keyWidth + 10, y, {
+        width: contentWidth - keyWidth,
+        align: "left",
+      });
+
     y = doc.y + rowSpacing;
+
 
     doc.end();
     stream.on("finish", () => resolve(outputPath));
@@ -317,8 +344,7 @@ export const extractFingerprintFromPDF = async (
           }
         } catch (parseError) {
           log(
-            `pdf-parse with options failed: ${JSON.stringify(option)} - ${
-              parseError.message
+            `pdf-parse with options failed: ${JSON.stringify(option)} - ${parseError.message
             }`
           );
           continue;

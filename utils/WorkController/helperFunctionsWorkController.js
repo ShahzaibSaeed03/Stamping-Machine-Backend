@@ -139,18 +139,24 @@ export const generateCertificatePDF = ({
     }
 
     function drawLinkRow(key, text, url) {
+      // key in bold
       doc
         .font("Helvetica-Bold")
         .text(key + " : ", leftMargin, y, { continued: true });
-      doc.fillColor("blue").text(text, doc.x, y, {
-        width: contentWidth - keyWidth,
-        align: "left",
-        underline: true,
-        link: url,
-      });
-      doc.fillColor("black");
+    
+      // link text in normal font
+      doc
+        .font("Helvetica")
+        .fillColor("black")
+        .text(text, doc.x, y, {
+          width: contentWidth - keyWidth,
+          align: "left",
+          link: url,
+        });
+    
+      doc.fillColor("black"); // reset fill
       y = doc.y + rowSpacing;
-    }
+    }    
 
     // Title inside certificate
     doc

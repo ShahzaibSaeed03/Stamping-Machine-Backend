@@ -1,6 +1,5 @@
 import multer from "multer";
 import path from "path";
-import AdmZip from "adm-zip";
 
 // Storage configuration
 const storage = multer.diskStorage({
@@ -8,7 +7,7 @@ const storage = multer.diskStorage({
     cb(null, "work-uploads/");
   },
   filename: function (req, file, cb) {
-    cb(null,file.originalname);
+    cb(null, file.originalname);
   },
 });
 
@@ -56,27 +55,16 @@ const validateSingleZipAndContents = (req, res, next) => {
     });
   }
   const file = files[0];
-  try {
-    const zip = new AdmZip(file.path);
-    const entries = zip.getEntries();
-    for (const entry of entries) {
-      const entryExt = path.extname(entry.entryName).toLowerCase();
-      if (entryExt === ".exe" || entryExt === ".js") {
-        return res.status(400).json({
-          message:
-            "Your zip file contains forbidden file types (.exe or .js). Please remove them and try again.",
-        });
-      }
-    }
-    next();
-  } catch (err) {
-    return res
-      .status(400)
-      .json({
-        message:
-          "Failed to process zip file. Please upload a valid .zip archive.",
-      });
+
+  // Check if the uploaded file itself is .exe or .js
+  const fileExt = path.extname(file.originalname).toLowerCase();
+  if (fileExt === ".exe" || fileExt === ".js") {
+    return res.status(400).json({
+      error: "We don't accept .exe or .js files. Please upload your work as a .zip archive.",
+    });
   }
+
+  next();
 };
 
 // Multer middleware for verification (accepts three files: file, certificate, ots)

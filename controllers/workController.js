@@ -62,8 +62,8 @@ const uploadWork = asyncHandler(async (req, res) => {
 
   const user = req.user;
   const { workTitle, copyrightOwner, additionalOwners } = req.body;
-  if (!workTitle || !copyrightOwner || !additionalOwners) {
-    return res.status(400).json({ error: "Please fill in all fields." });
+  if (!workTitle || !copyrightOwner) {
+    return res.status(400).json({ error: "Please fill in work title and copyright owner fields." });
   }
 
   const fingerprint = await computeSHA256(file.path);
@@ -94,7 +94,7 @@ const uploadWork = asyncHandler(async (req, res) => {
     workTitle,
     copyrightOwner,
     user,
-    additionalOwners,
+    additionalOwners: additionalOwners || "",
     displayedID,
     fingerprint,
     originalFileName: file.originalname,
@@ -127,7 +127,7 @@ const uploadWork = asyncHandler(async (req, res) => {
     status: true,
     title: workTitle,
     copyright_owner: copyrightOwner,
-    additional_copyright_owners: additionalOwners,
+    additional_copyright_owners: additionalOwners || "",
     registeration_date: new Date(),
     file_name: file.originalname,
     file_fingerprint: fingerprint,

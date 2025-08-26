@@ -219,16 +219,17 @@ export const generateCertificatePDF = ({
     // });
     // SHA fingerprint in one line (no wrapping)
     // SHA fingerprint with extra vertical spacing
+    // SHA fingerprint on its own full-width line
     doc
       .font("Helvetica-Bold")
       .text("File SHA256 fingerprint :", leftMargin, y);
 
-    y = doc.y + 8; // add vertical gap (adjust "5" as needed)
+    y = doc.y + 8; // vertical gap
 
     doc
       .font("Helvetica")
       .text(fingerprint, leftMargin, y, {
-        width: contentWidth,
+        width: doc.page.width - leftMargin * 2, // use full page width
         align: "left",
       });
 

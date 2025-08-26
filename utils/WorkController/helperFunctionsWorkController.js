@@ -209,20 +209,26 @@ export const generateCertificatePDF = ({
       drawRow("Copyrighted File name", originalFileName);
     }
 
-    // SHA fingerprint with wrapping
-    // SHA fingerprint with aligned key + wrapped value
+    // // SHA fingerprint with wrapping
+    // doc
+    //   .font("Helvetica-Bold")
+    //   .text("File SHA256 fingerprint : ", leftMargin, y, { continued: true });
+    // doc.font("Helvetica").text(fingerprint, doc.x, y, {
+    //   width: contentWidth,
+    //   align: "left",
+    // });
+    // SHA fingerprint in one line (no wrapping)
+    // SHA fingerprint with extra vertical spacing
     doc
       .font("Helvetica-Bold")
-      .text("File SHA256 fingerprint :", leftMargin, y, {
-        width: keyWidth,
-        continued: false,
-        align: "left",
-      });
+      .text("File SHA256 fingerprint :", leftMargin, y);
+
+    y = doc.y + 8; // add vertical gap (adjust "5" as needed)
 
     doc
       .font("Helvetica")
-      .text(fingerprint, leftMargin + keyWidth + 10, y, {
-        width: contentWidth - keyWidth,
+      .text(fingerprint, leftMargin, y, {
+        width: contentWidth,
         align: "left",
       });
 

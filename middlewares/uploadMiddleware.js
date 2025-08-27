@@ -11,23 +11,12 @@ const storage = multer.diskStorage({
   },
 });
 
-// Only allow .zip or zip category files
-const allowedZipMimes = [
-  "application/zip",
-  "application/x-zip-compressed",
-  "multipart/x-zip",
-  "application/x-compressed",
-];
+
 
 const fileFilter = (req, file, cb) => {
   const ext = path.extname(file.originalname).toLowerCase();
-  if (ext !== ".zip" || !allowedZipMimes.includes(file.mimetype)) {
-    return cb(
-      new Error(
-        "Only .zip files are allowed. Please upload your work as a .zip archive."
-      ),
-      false
-    );
+  if (ext === ".exe" || ext === ".js") {
+    return cb(new Error(".js and .exe files are not accepted"), false);
   }
   cb(null, true);
 };
@@ -44,14 +33,13 @@ const validateSingleZipAndContents = (req, res, next) => {
 
   if (!files || files.length === 0) {
     return res.status(400).json({
-      error: "No files uploaded. Please select at least one file.",
+      error: "No file uploaded.",
     });
   }
 
   if (files.length !== 1) {
     return res.status(400).json({
-      message:
-        "You must upload exactly one .zip file. Please combine your work into a single .zip archive.",
+      error: "Please upload exactly one file.",
     });
   }
   const file = files[0];
@@ -71,6 +59,7 @@ const validateSingleZipAndContents = (req, res, next) => {
 const verifyUploadMiddleware = multer({
   storage,
   limits: { fileSize: 120 * 1024 * 1024 },
+  fileFilter,
 }).fields([
   { name: 'originalFile', maxCount: 1 },
   { name: 'certificate', maxCount: 1 },

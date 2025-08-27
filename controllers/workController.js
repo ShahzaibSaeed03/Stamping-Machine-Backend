@@ -56,8 +56,14 @@ const uploadWork = asyncHandler(async (req, res) => {
   const file = req.file;
   if (!file) {
     return res.status(400).json({
-      error: "No file uploaded. Please select a .zip file to upload.",
+      error: "No file uploaded.",
     });
+  }
+
+  // Reject .js and .exe files explicitly
+  const ext = path.extname(file.originalname).toLowerCase();
+  if (ext === ".js" || ext === ".exe") {
+    return res.status(400).json({ error: ".js and .exe files are not accepted" });
   }
 
   const user = req.user;
@@ -174,64 +180,7 @@ const uploadWork = asyncHandler(async (req, res) => {
   });
 });
 
-// VERIFY WORK REGISTRATION CONTROLLER
-// const verifyWorkRegistration = asyncHandler(async (req, res) => {
-//   const files = req.files;
-//   if (!files || !files.originalFile || !files.certificate || !files.ots) {
-//     return res.status(400).json({
-//       error: "Please select the file to be verified, its certificate and its .ots file."
-//     });
-//   }
-
-//   const filePath = files.originalFile[0].path;
-//   const certificatePath = files.certificate[0].path;
-//   const otsPath = files.ots[0].path;
-
-//   let fileFingerprint;
-//   try {
-//     fileFingerprint = await computeSHA256(filePath);
-//     console.log("fileFingerprint: ", fileFingerprint);
-//   } catch (err) {
-//     return res.status(400).json({ error: "Failed to calculate fingerprint of the file." });
-//   }
-
-//   let certFingerprint;
-//   try {
-//     certFingerprint = await extractFingerprintFromPDF(certificatePath);
-//     console.log("certFingerprint: ", certFingerprint);
-//   } catch (err) {
-//     return res.status(400).json({ error: "File doesn't match the certificate. (Fingerprint not found in certificate)" });
-//   }
-
-//   if (fileFingerprint !== certFingerprint) {
-//     const work = await Work.findOne({ file_fingerprint: fileFingerprint });
-//     if (!work) {
-//       return res.status(404).json({
-//         error: "This certificate is not in our database."
-//       });
-//     }
-
-//     const otsResult = await verifyOTS(certificatePath, otsPath);
-//     return res.status(200).json({
-//       message: "File doesn't match the certificate, but the certificate is registered.",
-//       otsStatus: otsResult
-//     });
-//   }
-
-//   const work = await Work.findOne({ file_fingerprint: fileFingerprint });
-//   if (!work) {
-//     return res.status(404).json({
-//       error: "This certificate is not in our database."
-//     });
-//   }
-
-//   const otsResult = await verifyOTS(certificatePath, otsPath);
-//   return res.status(200).json({
-//     message: "Verification successful.",
-//     otsStatus: otsResult
-//   });
-// });
-
+// Verify Work Controller
 const verifyWorkRegistration = asyncHandler(async (req, res) => {
   const files = req.files;
   if (!files || !files.originalFile || !files.certificate || !files.ots) {
@@ -239,6 +188,16 @@ const verifyWorkRegistration = asyncHandler(async (req, res) => {
       error:
         "Please select the file to be verified, its certificate and its .ots file.",
     });
+  }
+
+  // Reject .js and .exe uploads for any of the provided files
+  const fieldsToCheck = ['originalFile', 'certificate', 'ots'];
+  for (const field of fieldsToCheck) {
+    const originalname = files[field][0].originalname || '';
+    const ext = path.extname(originalname).toLowerCase();
+    if (ext === '.js' || ext === '.exe') {
+      return res.status(400).json({ error: '.js and .exe files are not accepted' });
+    }
   }
 
   // Get original paths

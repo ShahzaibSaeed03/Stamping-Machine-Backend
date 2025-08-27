@@ -11,7 +11,7 @@ import { uploadToS3 } from "../utils/WorkController/awsUtils.js";
 import { saveToDatabase } from "../utils/WorkController/saveToDatabase.js";
 import { sendConfirmationEmail } from "../utils/WorkController/sendConfirmationEmail.js";
 import { generateSignedUrl } from "../utils/generateSignedUrl.js";
-import { verifyOTS, stampWithOTS } from "../utils/WorkController/otsUtil.js";
+import { verifyOTS, stampWithOTS, getBlockByHeight } from "../utils/WorkController/otsUtil.js";
 import fs from "fs";
 import path from "path";
 
@@ -259,7 +259,26 @@ const verifyWorkRegistration = asyncHandler(async (req, res) => {
       });
     }
 
-    const otsResult = await verifyOTS(newCertPath, newOtsPath);
+    let otsResult = await verifyOTS(newCertPath, newOtsPath);
+
+    // Enrich verified anchors with readable UTC timestamps
+    if (otsResult && otsResult.status === "verified" && Array.isArray(otsResult.anchors)) {
+      const enriched = [];
+      for (const anchor of otsResult.anchors) {
+        const blockData = await getBlockByHeight(anchor.block);
+        if (blockData && typeof blockData.timestamp === "number") {
+          const readable = new Date(blockData.timestamp * 1000)
+            .toISOString()
+            .replace("T", " ")
+            .replace("Z", " UTC");
+          enriched.push({ ...anchor, timestamp: readable });
+        } else {
+          enriched.push(anchor);
+        }
+      }
+      otsResult = { ...otsResult, anchors: enriched };
+    }
+
     return res.status(200).json({
       message:
         "File doesn't match the certificate, but the certificate is registered.",
@@ -274,7 +293,25 @@ const verifyWorkRegistration = asyncHandler(async (req, res) => {
     });
   }
 
-  const otsResult = await verifyOTS(newCertPath, newOtsPath);
+  let otsResult = await verifyOTS(newCertPath, newOtsPath);
+
+  // Enrich verified anchors with readable UTC timestamps
+  if (otsResult && otsResult.status === "verified" && Array.isArray(otsResult.anchors)) {
+    const enriched = [];
+    for (const anchor of otsResult.anchors) {
+      const blockData = await getBlockByHeight(anchor.block);
+      if (blockData && typeof blockData.timestamp === "number") {
+        const readable = new Date(blockData.timestamp * 1000)
+          .toISOString()
+          .replace("T", " ")
+          .replace("Z", " UTC");
+        enriched.push({ ...anchor, timestamp: readable });
+      } else {
+        enriched.push(anchor);
+      }
+    }
+    otsResult = { ...otsResult, anchors: enriched };
+  }
 
   // Clean up temporary files after verification
   try {

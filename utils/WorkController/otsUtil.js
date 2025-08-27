@@ -50,3 +50,23 @@ export const verifyOTS = async (certificatePath, otsPath) => {
     };
   }
 };
+
+// Fetch Bitcoin block data by height using mempool.space APIs
+// Returns the full block JSON (including `timestamp` in seconds)
+export const getBlockByHeight = async (height) => {
+  try {
+    const hashRes = await fetch(`https://mempool.space/api/block-height/${height}`);
+    if (!hashRes.ok) {
+      throw new Error(`Failed to fetch block hash for height ${height}`);
+    }
+    const hash = (await hashRes.text()).trim();
+    const blockRes = await fetch(`https://mempool.space/api/block/${hash}`);
+    if (!blockRes.ok) {
+      throw new Error(`Failed to fetch block for hash ${hash}`);
+    }
+    return await blockRes.json();
+  } catch (error) {
+    console.error("getBlockByHeight error:", error?.message || error);
+    return null;
+  }
+};

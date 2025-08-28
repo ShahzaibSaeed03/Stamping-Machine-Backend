@@ -110,7 +110,7 @@ const uploadWork = asyncHandler(async (req, res) => {
   // 🔐 Step: Create OTS file using Python-based stamping
   let otsFilePath;
   try {
-    otsFilePath = await stampWithOTS(certificatePath);
+    otsFilePath = await stampWithOTS(certificatePath, displayedID);
   } catch (error) {
     return res
       .status(500)

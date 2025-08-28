@@ -4,6 +4,7 @@ import { promisify } from "util";
 const execAsync = promisify(exec);
 import path from "path";
 import { fileURLToPath } from "url";
+import fs from "fs";
 
 // __dirname replacement for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -13,7 +14,7 @@ const __dirname = path.dirname(__filename);
 const pythonScript = path.join(__dirname, "../../ots-env/bin/python");
 const scriptPath = path.join(__dirname, "../../py_scripts/ots_handler.py");
 
-export const stampWithOTS = async (filePath) => {
+export const stampWithOTS = async (filePath, displayedID) => {
   try {
     const { stdout } = await execAsync(
       `${pythonScript} ${scriptPath} stamp "${filePath}"`
@@ -22,7 +23,16 @@ export const stampWithOTS = async (filePath) => {
     if (result.error) {
       throw new Error(result.error);
     }
-    return result.otsFilePath;
+
+    // Rename the OTS file to have "Timestamp-" prefix with displayedID
+    const originalOtsPath = result.otsFilePath;
+    const dir = path.dirname(originalOtsPath);
+    const newOtsPath = path.join(dir, `Timestamp-${displayedID}.pdf.ots`);
+
+    // Rename the file
+    fs.renameSync(originalOtsPath, newOtsPath);
+
+    return newOtsPath;
   } catch (err) {
     console.error("Stamping Error:", err.stderr || err.message);
     throw new Error("Failed to create .ots file.");

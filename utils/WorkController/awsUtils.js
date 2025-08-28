@@ -10,17 +10,14 @@ export const uploadToS3 = async (file, folder) => {
   // Get the base name without any extension
   const baseName = path.basename(file.path).split(".")[0];
 
-  // Determine the extension and prefix based on the folder
+  // Determine the extension based on the folder
   let extension = "";
-  let prefix = "";
   switch (folder) {
     case "certificates":
       extension = ".pdf";
-      prefix = "Certificate-";
       break;
     case "ots":
       extension = ".pdf.ots";
-      prefix = "Timestamp-";
       break;
     case "files":
       extension = path.extname(file.originalname);
@@ -29,7 +26,7 @@ export const uploadToS3 = async (file, folder) => {
 
   const uploadParams = {
     Bucket: process.env.AWS_BUCKET_NAME,
-    Key: `${folder}/${prefix}${baseName}${extension}`,
+    Key: `${folder}/${baseName}${extension}`,
     Body: fileStream,
   };
 

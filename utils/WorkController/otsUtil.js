@@ -29,7 +29,7 @@ export const stampWithOTS = async (filePath, displayedID) => {
     const dir = path.dirname(originalOtsPath);
     const newOtsPath = path.join(dir, `Timestamp-${displayedID}.ots`);
 
-    // Rename the file
+    // Rename the file (remove .pdf.ots and make it .ots)
     fs.renameSync(originalOtsPath, newOtsPath);
 
     return newOtsPath;

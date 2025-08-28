@@ -215,7 +215,7 @@ const verifyWorkRegistration = asyncHandler(async (req, res) => {
     displayedID = certFileName.replace('Certificate-', '').replace('.pdf', '');
   } else if (certFileName.startsWith('Timestamp-')) {
     // Handle case where someone uploads the OTS file as certificate
-    displayedID = certFileName.replace('Timestamp-', '').replace('.pdf.ots', '');
+    displayedID = certFileName.replace('Timestamp-', '').replace('.ots', '');
   } else {
     // Fallback: extract from the original filename
     displayedID = path.basename(certificatePath).split(".")[0];

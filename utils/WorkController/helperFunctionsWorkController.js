@@ -100,7 +100,7 @@ export const generateCertificatePDF = ({
     if (!fs.existsSync(certificatesDir)) {
       fs.mkdirSync(certificatesDir, { recursive: true });
     }
-    const outputPath = path.join(certificatesDir, `${displayedID}.pdf`);
+    const outputPath = path.join(certificatesDir, `Certificate-${displayedID}.pdf`);
     const doc = new PDFDocument({ margin: 50 });
     const stream = fs.createWriteStream(outputPath);
     doc.pipe(stream);

@@ -209,12 +209,12 @@ const verifyWorkRegistration = asyncHandler(async (req, res) => {
   const certBaseName = path.basename(certificatePath).split(".")[0];
   const otsBaseName = path.basename(otsPath).split(".")[0];
 
-  // Create new paths with correct extensions
+  // Create new paths with correct extensions and prefixes
   const newCertPath = path.join(
     path.dirname(certificatePath),
-    `${certBaseName}.pdf`
+    `Certificate-${certBaseName}.pdf`
   );
-  const newOtsPath = path.join(path.dirname(otsPath), `${otsBaseName}.pdf.ots`);
+  const newOtsPath = path.join(path.dirname(otsPath), `Timestamp-${otsBaseName}.pdf.ots`);
 
   // Rename files if they don't already have the correct extensions
   if (certificatePath !== newCertPath) {

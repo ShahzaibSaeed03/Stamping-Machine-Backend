@@ -72,13 +72,13 @@ export const computeSHA256 = (filePath) => {
 // GENERATE DISPLAY ID FUNCTION
 export const generateDisplayedID = async (clientId, workCounter) => {
   const today = new Date();
-  const datePart = today
-    .toISOString()
-    .slice(0, 10)
-    .replace(/-/g, "")
-    .slice(0, 6); // DDMMYY
 
-  //   const count = await Work.countDocuments({ clientId });
+  const dd = String(today.getDate()).padStart(2, "0");
+  const mm = String(today.getMonth() + 1).padStart(2, "0"); // months are 0-based
+  const yy = String(today.getFullYear()).slice(-2);
+
+  const datePart = `${dd}${mm}${yy}`; // DDMMYY
+
   const nextNumber = (workCounter + 1).toString().padStart(4, "0");
 
   return `${clientId}${datePart}${nextNumber}`;

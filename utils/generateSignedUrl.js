@@ -13,7 +13,7 @@ import { s3Client } from "../config/s3Client.js";
 // };
 
 
-const generateSignedUrl = async (keyOrUrl, customFilename = null) => {
+const generateSignedUrl = async (keyOrUrl) => {
   if (!keyOrUrl || typeof keyOrUrl !== "string") {
     throw new Error("Invalid key: must be a non-empty string");
   }
@@ -28,7 +28,6 @@ const generateSignedUrl = async (keyOrUrl, customFilename = null) => {
   const command = new GetObjectCommand({
     Bucket: process.env.AWS_BUCKET_NAME,
     Key: key,
-    ...(customFilename && { ResponseContentDisposition: `attachment; filename="${customFilename}"` }),
   });
 
   return await getSignedUrl(s3Client, command, { expiresIn: 60 * 5 });

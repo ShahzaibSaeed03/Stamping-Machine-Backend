@@ -144,12 +144,26 @@ const uploadWork = asyncHandler(async (req, res) => {
     },
   });
 
-  // ✅ Generate Signed URLs with custom filenames
-  const certificateUrl = await generateSignedUrl(s3Links.certUrl, `Certificate-${displayedID}.pdf`);
+  // ✅ Generate Signed URLs
+  const certificateUrl = await generateSignedUrl(s3Links.certUrl);
   const signedOriginalFileUrl = await generateSignedUrl(s3Links.fileUrl);
-  const otsUrl = await generateSignedUrl(s3Links.otsUrl, `Timestamp-${displayedID}.pdf.ots`);
+  const otsUrl = await generateSignedUrl(s3Links.otsUrl);
 
   await sendConfirmationEmail(user.email, workTitle);
+
+  // res.status(201).json({
+  //   message: "Work uploaded and registered",
+  //   fingerprint,
+  //   workCounter,
+  //   displayedID,
+  //   certificatePath,
+  //   tsaData: {
+  //     otsFilePath,
+  //     blockInfo: "Pending (can be updated after verification)"
+  //   },
+  //   s3Links,
+  //   workCertificateData
+  // });
 
   res.status(201).json({
     status: "success",
@@ -200,7 +214,7 @@ const verifyWorkRegistration = asyncHandler(async (req, res) => {
     path.dirname(certificatePath),
     `${certBaseName}.pdf`
   );
-  const newOtsPath = path.join(path.dirname(otsPath), `${otsBaseName}.ots`);
+  const newOtsPath = path.join(path.dirname(otsPath), `${otsBaseName}.pdf.ots`);
 
   // Rename files if they don't already have the correct extensions
   if (certificatePath !== newCertPath) {
@@ -263,15 +277,6 @@ const verifyWorkRegistration = asyncHandler(async (req, res) => {
         }
       }
       otsResult = { ...otsResult, anchors: enriched };
-    }
-
-    // Clean up temporary files after verification
-    try {
-      fs.unlinkSync(newCertPath);
-      fs.unlinkSync(newOtsPath);
-      fs.unlinkSync(filePath);
-    } catch (err) {
-      console.error("Error cleaning up temporary files:", err);
     }
 
     return res.status(200).json({

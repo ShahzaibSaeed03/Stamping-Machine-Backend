@@ -147,7 +147,7 @@ const uploadWork = asyncHandler(async (req, res) => {
   // ✅ Generate Signed URLs with custom filenames
   const certificateUrl = await generateSignedUrl(s3Links.certUrl, `Certificate-${displayedID}.pdf`);
   const signedOriginalFileUrl = await generateSignedUrl(s3Links.fileUrl);
-  const otsUrl = await generateSignedUrl(s3Links.otsUrl, `Timestamp-${displayedID}.ots`);
+  const otsUrl = await generateSignedUrl(s3Links.otsUrl, `Timestamp-${displayedID}.pdf.ots`);
 
   await sendConfirmationEmail(user.email, workTitle);
 
@@ -245,7 +245,7 @@ const verifyWorkRegistration = asyncHandler(async (req, res) => {
       });
     }
 
-    let otsResult = await verifyOTS(newCertPath, newOtsPath);
+    let otsResult = await verifyOTS(filePath, newOtsPath);
 
     // Enrich verified anchors with readable UTC timestamps
     if (otsResult && otsResult.status === "verified" && Array.isArray(otsResult.anchors)) {
@@ -265,6 +265,15 @@ const verifyWorkRegistration = asyncHandler(async (req, res) => {
       otsResult = { ...otsResult, anchors: enriched };
     }
 
+    // Clean up temporary files after verification
+    try {
+      fs.unlinkSync(newCertPath);
+      fs.unlinkSync(newOtsPath);
+      fs.unlinkSync(filePath);
+    } catch (err) {
+      console.error("Error cleaning up temporary files:", err);
+    }
+
     return res.status(200).json({
       message:
         "File doesn't match the certificate, but the certificate is registered.",
@@ -279,7 +288,7 @@ const verifyWorkRegistration = asyncHandler(async (req, res) => {
     });
   }
 
-  let otsResult = await verifyOTS(newCertPath, newOtsPath);
+  let otsResult = await verifyOTS(filePath, newOtsPath);
 
   // Enrich verified anchors with readable UTC timestamps
   if (otsResult && otsResult.status === "verified" && Array.isArray(otsResult.anchors)) {

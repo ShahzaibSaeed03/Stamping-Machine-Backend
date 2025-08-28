@@ -213,19 +213,30 @@ const verifyWorkRegistration = asyncHandler(async (req, res) => {
   if (certFileName.startsWith('Certificate-')) {
     // Remove 'Certificate-' prefix and '.pdf' extension
     displayedID = certFileName.replace('Certificate-', '').replace('.pdf', '');
+  } else if (certFileName.startsWith('Timestamp-')) {
+    // Handle case where someone uploads the OTS file as certificate
+    displayedID = certFileName.replace('Timestamp-', '').replace('.pdf.ots', '');
   } else {
     // Fallback: extract from the original filename
     displayedID = path.basename(certificatePath).split(".")[0];
   }
 
-  // Create new paths with correct extensions and prefixes
+  // Debug logging
+  if (process.env.NODE_ENV === "development") {
+    console.log("Certificate filename:", certFileName);
+    console.log("Extracted displayedID:", displayedID);
+  }
+
+  // For verification, we need to use the original naming that OTS expects
+  // OTS verification expects: {displayedID}.pdf and {displayedID}.pdf.ots
   const newCertPath = path.join(
     path.dirname(certificatePath),
-    `Certificate-${displayedID}.pdf`
+    `${displayedID}.pdf`
   );
-  const newOtsPath = path.join(path.dirname(otsPath), `Timestamp-${displayedID}.pdf.ots`);
+  const newOtsPath = path.join(path.dirname(otsPath), `${displayedID}.pdf.ots`);
 
-  // Rename files if they don't already have the correct names
+  // Rename files to the format that OTS verification expects
+  // This handles both prefixed and non-prefixed uploaded files
   if (certificatePath !== newCertPath) {
     fs.renameSync(certificatePath, newCertPath);
   }

@@ -245,7 +245,7 @@ const verifyWorkRegistration = asyncHandler(async (req, res) => {
       });
     }
 
-    let otsResult = await verifyOTS(filePath, newOtsPath);
+    let otsResult = await verifyOTS(newCertPath, newOtsPath);
 
     // Enrich verified anchors with readable UTC timestamps
     if (otsResult && otsResult.status === "verified" && Array.isArray(otsResult.anchors)) {
@@ -288,7 +288,7 @@ const verifyWorkRegistration = asyncHandler(async (req, res) => {
     });
   }
 
-  let otsResult = await verifyOTS(filePath, newOtsPath);
+  let otsResult = await verifyOTS(newCertPath, newOtsPath);
 
   // Enrich verified anchors with readable UTC timestamps
   if (otsResult && otsResult.status === "verified" && Array.isArray(otsResult.anchors)) {

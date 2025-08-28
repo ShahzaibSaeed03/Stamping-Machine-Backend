@@ -33,8 +33,7 @@ def verify_ots_file(file_path, ots_path):
         raise FileNotFoundError("One or both files not found.")
 
     try:
-        # Use the original file path for verification, not just the OTS file
-        result = subprocess.run([OTS_BIN_PATH, "--no-bitcoin", "verify", ots_path, file_path], capture_output=True, text=True)
+        result = subprocess.run([OTS_BIN_PATH, "--no-bitcoin", "verify", ots_path], capture_output=True, text=True)
         full_output = (result.stdout or "") + (result.stderr or "")
 
         # Parse calendar attestations

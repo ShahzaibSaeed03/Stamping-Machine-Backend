@@ -27,7 +27,7 @@ export const stampWithOTS = async (filePath, displayedID) => {
     // Rename the OTS file to have "Timestamp-" prefix with displayedID
     const originalOtsPath = result.otsFilePath;
     const dir = path.dirname(originalOtsPath);
-    const newOtsPath = path.join(dir, `Timestamp-${displayedID}.pdf.ots`);
+    const newOtsPath = path.join(dir, `Timestamp-${displayedID}.ots`);
 
     // Rename the file
     fs.renameSync(originalOtsPath, newOtsPath);

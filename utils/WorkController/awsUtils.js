@@ -17,7 +17,7 @@ export const uploadToS3 = async (file, folder) => {
       extension = ".pdf";
       break;
     case "ots":
-      extension = ".pdf.ots";
+      extension = ".ots";
       break;
     case "files":
       extension = path.extname(file.originalname);

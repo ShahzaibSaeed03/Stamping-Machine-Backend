@@ -205,18 +205,27 @@ const verifyWorkRegistration = asyncHandler(async (req, res) => {
   const certificatePath = files.certificate[0].path;
   const otsPath = files.ots[0].path;
 
-  // Get base names without any extensions
-  const certBaseName = path.basename(certificatePath).split(".")[0];
-  const otsBaseName = path.basename(otsPath).split(".")[0];
+  // Extract the displayedID from the certificate filename
+  // Certificate should be named: Certificate-{displayedID}.pdf
+  const certFileName = path.basename(certificatePath);
+  let displayedID;
+
+  if (certFileName.startsWith('Certificate-')) {
+    // Remove 'Certificate-' prefix and '.pdf' extension
+    displayedID = certFileName.replace('Certificate-', '').replace('.pdf', '');
+  } else {
+    // Fallback: extract from the original filename
+    displayedID = path.basename(certificatePath).split(".")[0];
+  }
 
   // Create new paths with correct extensions and prefixes
   const newCertPath = path.join(
     path.dirname(certificatePath),
-    `Certificate-${certBaseName}.pdf`
+    `Certificate-${displayedID}.pdf`
   );
-  const newOtsPath = path.join(path.dirname(otsPath), `Timestamp-${otsBaseName}.pdf.ots`);
+  const newOtsPath = path.join(path.dirname(otsPath), `Timestamp-${displayedID}.pdf.ots`);
 
-  // Rename files if they don't already have the correct extensions
+  // Rename files if they don't already have the correct names
   if (certificatePath !== newCertPath) {
     fs.renameSync(certificatePath, newCertPath);
   }

@@ -12,6 +12,7 @@ import { saveToDatabase } from "../utils/WorkController/saveToDatabase.js";
 import { sendConfirmationEmail } from "../utils/WorkController/sendConfirmationEmail.js";
 import { generateSignedUrl } from "../utils/generateSignedUrl.js";
 import { verifyOTS, stampWithOTS, getBlockByHeight } from "../utils/WorkController/otsUtil.js";
+import Counter from "../models/counterModel.js";
 import fs from "fs";
 import path from "path";
 
@@ -72,9 +73,20 @@ const uploadWork = asyncHandler(async (req, res) => {
     return res.status(400).json({ error: "Please fill in work title and copyright owner fields." });
   }
 
+  // Ensure user has a sequential userSeq; if not, assign one atomically
+  if (!user.userSeq && user.userSeq !== 0) {
+    const counter = await Counter.findOneAndUpdate(
+      { _id: "userSeq" },
+      { $inc: { seq: 1 } },
+      { upsert: true, new: true }
+    );
+    user.userSeq = counter.seq;
+    await user.save();
+  }
+
   const fingerprint = await computeSHA256(file.path);
   const workCounter = await Work.countDocuments({ id_client: user._id });
-  const displayedID = await generateDisplayedID(user._id, workCounter);
+  const displayedID = await generateDisplayedID(user.userSeq, workCounter);
 
   const existingWork = await Work.findOne({ displayed_ID: displayedID });
   if (existingWork) {
@@ -106,6 +118,7 @@ const uploadWork = asyncHandler(async (req, res) => {
     originalFileName: file.originalname,
     originalFileUrl,
   });
+
 
   // 🔐 Step: Create OTS file using Python-based stamping
   let otsFilePath;

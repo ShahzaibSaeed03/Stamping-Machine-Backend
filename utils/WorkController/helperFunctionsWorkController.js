@@ -70,7 +70,7 @@ export const computeSHA256 = (filePath) => {
 };
 
 // GENERATE DISPLAY ID FUNCTION
-export const generateDisplayedID = async (clientId, workCounter) => {
+export const generateDisplayedID = async (userSeq, workCounter) => {
   const today = new Date();
 
   const dd = String(today.getDate()).padStart(2, "0");
@@ -81,7 +81,7 @@ export const generateDisplayedID = async (clientId, workCounter) => {
 
   const nextNumber = (workCounter + 1).toString().padStart(4, "0");
 
-  return `${clientId}${datePart}${nextNumber}`;
+  return `${userSeq}${datePart}${nextNumber}`;
 };
 
 // GENERATE CERTIFICATE PDF FUNCTION

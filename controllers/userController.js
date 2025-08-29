@@ -2,6 +2,7 @@ import express from "express";
 import asyncHandler from "express-async-handler";
 import User from "../models/userModel.js";
 import generateToken from "../utils/generateToken.js";
+import Counter from "../models/counterModel.js";
 
 // USER REGISTERING CONTROLLER
 const registerUser = asyncHandler(async (req, res, next) => {
@@ -18,10 +19,18 @@ const registerUser = asyncHandler(async (req, res, next) => {
     throw new Error("User already Exists.");
   }
 
+  // Generate sequential userSeq atomically
+  const counter = await Counter.findOneAndUpdate(
+    { _id: "userSeq" },
+    { $inc: { seq: 1 } },
+    { upsert: true, new: true }
+  );
+
   // CREATING THE USER
   const user = await User.create({
     email,
     creation_date: new Date(),
+    userSeq: counter.seq,
   });
 
   if (user) {
@@ -29,6 +38,7 @@ const registerUser = asyncHandler(async (req, res, next) => {
       id: user._id,
       creation_date: user.creation_date,
       email: user.email,
+      userSeq: user.userSeq,
     });
   } else {
     res.status(400);
@@ -52,7 +62,7 @@ const loginUser = asyncHandler(async (req, res, next) => {
       id: user._id,
       email: user.email,
       name: user.name,
-      clientId: user.clientId,
+      userSeq: user.userSeq,
       token: await generateToken(user._id),
     });
   } else {
@@ -65,11 +75,11 @@ const loginUser = asyncHandler(async (req, res, next) => {
 const allUser = asyncHandler(async (req, res, next) => {
   const keyword = req.query.search
     ? {
-        $or: [
-          { name: { $regex: req.query.search, $options: "i" } },
-          { email: { $regex: req.query.search, $options: "i" } },
-        ],
-      }
+      $or: [
+        { name: { $regex: req.query.search, $options: "i" } },
+        { email: { $regex: req.query.search, $options: "i" } },
+      ],
+    }
     : {};
 
   const users = await User.find(keyword).find({ _id: { $ne: req.user._id } });

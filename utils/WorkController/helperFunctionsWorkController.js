@@ -131,7 +131,7 @@ export const generateCertificatePDF = ({
       // Draw the key in a fixed-width column
       doc
         .font("Helvetica-Bold")
-        .text(key + " :", leftMargin, y, {
+        .text(key + ":", leftMargin, y, {
           width: keyWidth,
           continued: false,
           align: "left",
@@ -152,7 +152,7 @@ export const generateCertificatePDF = ({
       // Key
       doc
         .font("Helvetica-Bold")
-        .text(key + " :", leftMargin, y, {
+        .text(key + ":", leftMargin, y, {
           width: keyWidth,
           continued: false,
           align: "left",
@@ -203,26 +203,26 @@ export const generateCertificatePDF = ({
     drawRow("Registration Date", new Date().toLocaleString());
     drawRow("Timestamping Authority", "Open Timestamps");
 
-    if (originalFileUrl) {
-      drawLinkRow("Copyrighted File name", originalFileName, originalFileUrl);
-    } else {
-      drawRow("Copyrighted File name", originalFileName);
-    }
+    // if (originalFileUrl) {
+    //   drawLinkRow("Copyrighted File name", originalFileName, originalFileUrl);
+    // } else {
+    //   drawRow("Copyrighted File name", originalFileName);
+    // }
+    drawRow("Copyrighted File name", originalFileName);
 
     // // SHA fingerprint with wrapping
     // doc
     //   .font("Helvetica-Bold")
-    //   .text("File SHA256 fingerprint : ", leftMargin, y, { continued: true });
+    //   .text("File SHA256 fingerprint: ", leftMargin, y, { continued: true });
     // doc.font("Helvetica").text(fingerprint, doc.x, y, {
     //   width: contentWidth,
     //   align: "left",
     // });
-    // SHA fingerprint in one line (no wrapping)
-    // SHA fingerprint with extra vertical spacing
+
     // SHA fingerprint on its own full-width line
     doc
       .font("Helvetica-Bold")
-      .text("File SHA256 fingerprint :", leftMargin, y);
+      .text("File SHA256 fingerprint:", leftMargin, y);
 
     y = doc.y + 8; // vertical gap
 

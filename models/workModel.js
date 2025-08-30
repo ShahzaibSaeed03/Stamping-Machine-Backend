@@ -16,12 +16,13 @@ const workSchema = new mongoose.Schema({
   registeration_date: { type: Date, default: Date.now },
   file_name: { type: String, required: true },
   file_fingerprint: { type: String, required: true },
-  id_file: { type: String, required: true }, // S3 file key or link
+  id_file: { type: String, required: true }, // S3 file key or link (original file)
   id_certificate: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Certificate",
     required: true,
   },
+  id_ots: { type: String }, // S3 URL for the OTS file
 });
 
 const Work = mongoose.model("Work", workSchema);

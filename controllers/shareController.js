@@ -107,11 +107,17 @@ const getSharedWork = asyncHandler(async (req, res) => {
     }
   }
 
-  // Generate signed URLs for both the work file and certificate
+  // Generate signed URLs for the work file, certificate, and OTS file
   const fileSignedUrl = await generateSignedUrl(sharedWork.id_work.id_file);
   const certificateSignedUrl = await generateSignedUrl(
     sharedWork.id_work.id_certificate.id_file
   );
+
+  // Generate signed URL for OTS file if it exists
+  let otsSignedUrl = null;
+  if (sharedWork.id_work.id_ots) {
+    otsSignedUrl = await generateSignedUrl(sharedWork.id_work.id_ots);
+  }
 
   res.json({
     success: true,
@@ -120,6 +126,7 @@ const getSharedWork = asyncHandler(async (req, res) => {
       file_name: sharedWork.id_work.file_name,
       downloadUrl: fileSignedUrl,
       certificateUrl: certificateSignedUrl,
+      otsUrl: otsSignedUrl, // Include OTS file URL
     },
   });
 });

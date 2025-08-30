@@ -155,6 +155,7 @@ const uploadWork = asyncHandler(async (req, res) => {
       otsFilePath,
       blockInfo: "Pending (can be updated after verification)",
     },
+    otsFileUrl: s3Links.otsUrl, // Pass OTS file URL
   });
 
   // ✅ Generate Signed URLs
@@ -182,6 +183,7 @@ const uploadWork = asyncHandler(async (req, res) => {
     status: "success",
     message: "Work uploaded and registered successfully.",
     data: {
+      id: workCertificateData._id,
       displayed_id: displayedID,
       title: workTitle,
       registration_date: workCertificateData.registeration_date,
@@ -396,6 +398,7 @@ const getWorksByUser = asyncHandler(async (req, res) => {
         date: work.id_certificate.registration_date,
         TSA: work.id_certificate.TSA,
       },
+      otsUrl: work.id_ots, // Include OTS file URL
     })),
   });
 });

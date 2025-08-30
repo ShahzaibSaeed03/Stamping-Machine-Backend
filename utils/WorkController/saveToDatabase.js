@@ -5,7 +5,7 @@ export const saveToDatabase = async ({
   id_client,
   id_category,
   workCounter, // for number_for_client column
-  displayed_ID:displayedID,
+  displayed_ID: displayedID,
   status,
   title,
   copyright_owner,
@@ -19,6 +19,7 @@ export const saveToDatabase = async ({
   // certificate_name: displayedID, // Use from above
   // registration_date: new Date(), // Use from above
   TSA,
+  otsFileUrl, // OTS file URL
 }) => {
   try {
     // 1. Create certificate document
@@ -48,6 +49,7 @@ export const saveToDatabase = async ({
       file_fingerprint,
       id_file: s3_links.fileUrl,
       id_certificate: certificate._id,
+      id_ots: otsFileUrl, // Store OTS file URL
     });
 
     return work;

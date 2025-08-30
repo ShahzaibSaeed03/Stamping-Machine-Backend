@@ -1,5 +1,5 @@
 import express from "express";
-import { 
+import {
   createShareLink,
   getSharedWork,
   listWorkShares,
@@ -14,7 +14,7 @@ router.post("/create", userAuthMiddleware, createShareLink);
 router.get("/list/:workId", userAuthMiddleware, listWorkShares);
 router.delete("/:shareId", userAuthMiddleware, deleteShare);
 
-// Public share access route - no auth required
-router.get("/access/:shareId", getSharedWork);
+// Public share access route - no auth required, but POST to handle password in body
+router.post("/access/:shareId", getSharedWork);
 
 export default router; 

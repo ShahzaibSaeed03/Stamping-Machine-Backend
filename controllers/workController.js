@@ -285,6 +285,8 @@ const verifyWorkRegistration = asyncHandler(async (req, res) => {
   }
 
   if (fileFingerprint !== certFingerprint) {
+    // File doesn't match the certificate - this is an error case
+    // Check if the certificate exists in our database
     const work = await Work.findOne({ file_fingerprint: fileFingerprint });
     if (!work) {
       return res.status(404).json({
@@ -292,30 +294,14 @@ const verifyWorkRegistration = asyncHandler(async (req, res) => {
       });
     }
 
-    let otsResult = await verifyOTS(newCertPath, newOtsPath);
-
-    // Enrich verified anchors with readable UTC timestamps
-    if (otsResult && otsResult.status === "verified" && Array.isArray(otsResult.anchors)) {
-      const enriched = [];
-      for (const anchor of otsResult.anchors) {
-        const blockData = await getBlockByHeight(anchor.block);
-        if (blockData && typeof blockData.timestamp === "number") {
-          const readable = new Date(blockData.timestamp * 1000)
-            .toISOString()
-            .replace("T", " ")
-            .replace("Z", " UTC");
-          enriched.push({ ...anchor, timestamp: readable });
-        } else {
-          enriched.push(anchor);
-        }
+    // Return error status - no need to verify OTS when files don't match
+    return res.status(400).json({
+      error: "File doesn't match the certificate. The uploaded file and certificate have different fingerprints.",
+      details: {
+        fileFingerprint,
+        certFingerprint,
+        message: "Certificate exists in database but file mismatch detected"
       }
-      otsResult = { ...otsResult, anchors: enriched };
-    }
-
-    return res.status(200).json({
-      message:
-        "File doesn't match the certificate, but the certificate is registered.",
-      otsStatus: otsResult,
     });
   }
 

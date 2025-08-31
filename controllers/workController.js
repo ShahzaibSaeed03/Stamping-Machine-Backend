@@ -5,6 +5,7 @@ import {
   generateDisplayedID,
   generateCertificatePDF,
   extractFingerprintFromPDF,
+  formatDateForCertificate
 } from "../utils/WorkController/helperFunctionsWorkController.js";
 import { uploadToAWS } from "../utils/WorkController/uploadToAWS.js";
 import { uploadToS3 } from "../utils/WorkController/awsUtils.js";
@@ -347,7 +348,7 @@ const verifyWorkRegistration = asyncHandler(async (req, res) => {
   return res.status(200).json({
     message: "Verification successful.",
     otsStatus: otsResult,
-    registeration_date: work.registeration_date
+    registeration_date: formatDateForCertificate(work.registeration_date)
   });
 });
 

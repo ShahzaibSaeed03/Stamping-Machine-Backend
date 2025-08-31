@@ -84,6 +84,23 @@ export const generateDisplayedID = async (userSeq, workCounter) => {
   return `${userSeq}${datePart}${nextNumber}`;
 };
 
+// FORMAT DATE FOR CERTIFICATE FUNCTION
+export const formatDateForCertificate = (date = new Date()) => {
+  const months = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+  ];
+
+  const day = date.getDate();
+  const month = months[date.getMonth()];
+  const year = date.getFullYear();
+  const hour = String(date.getUTCHours()).padStart(2, "0");
+  const minute = String(date.getUTCMinutes()).padStart(2, "0");
+  const second = String(date.getUTCSeconds()).padStart(2, "0");
+
+  return `${day} ${month} ${year} at ${hour}:${minute}:${second} UTC`;
+};
+
 // GENERATE CERTIFICATE PDF FUNCTION
 export const generateCertificatePDF = ({
   workTitle,
@@ -200,7 +217,7 @@ export const generateCertificatePDF = ({
     }
 
     drawRow("Reference number", displayedID);
-    drawRow("Registration Date", new Date().toLocaleString());
+    drawRow("Registration Date", formatDateForCertificate());
     drawRow("Timestamping Authority", "Open Timestamps");
 
     // if (originalFileUrl) {

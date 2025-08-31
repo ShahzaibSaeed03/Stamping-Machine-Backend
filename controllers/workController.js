@@ -119,6 +119,9 @@ const uploadWork = asyncHandler(async (req, res) => {
     originalFileUrl,
   });
 
+  console.log("Done")
+  return
+
 
   // 🔐 Step: Create OTS file using Python-based stamping
   let otsFilePath;
@@ -314,25 +317,26 @@ const verifyWorkRegistration = asyncHandler(async (req, res) => {
     });
   }
 
+
   let otsResult = await verifyOTS(newCertPath, newOtsPath);
 
   // Enrich verified anchors with readable UTC timestamps
-  if (otsResult && otsResult.status === "verified" && Array.isArray(otsResult.anchors)) {
-    const enriched = [];
-    for (const anchor of otsResult.anchors) {
-      const blockData = await getBlockByHeight(anchor.block);
-      if (blockData && typeof blockData.timestamp === "number") {
-        const readable = new Date(blockData.timestamp * 1000)
-          .toISOString()
-          .replace("T", " ")
-          .replace("Z", " UTC");
-        enriched.push({ ...anchor, timestamp: readable });
-      } else {
-        enriched.push(anchor);
-      }
-    }
-    otsResult = { ...otsResult, anchors: enriched };
-  }
+  // if (otsResult && otsResult.status === "verified" && Array.isArray(otsResult.anchors)) {
+  //   const enriched = [];
+  //   for (const anchor of otsResult.anchors) {
+  //     const blockData = await getBlockByHeight(anchor.block);
+  //     if (blockData && typeof blockData.timestamp === "number") {
+  //       const readable = new Date(blockData.timestamp * 1000)
+  //         .toISOString()
+  //         .replace("T", " ")
+  //         .replace("Z", " UTC");
+  //       enriched.push({ ...anchor, timestamp: readable });
+  //     } else {
+  //       enriched.push(anchor);
+  //     }
+  //   }
+  //   otsResult = { ...otsResult, anchors: enriched };
+  // }
 
   // Clean up temporary files after verification
   try {
@@ -346,6 +350,7 @@ const verifyWorkRegistration = asyncHandler(async (req, res) => {
   return res.status(200).json({
     message: "Verification successful.",
     otsStatus: otsResult,
+    registeration_date: work.registeration_date
   });
 });
 

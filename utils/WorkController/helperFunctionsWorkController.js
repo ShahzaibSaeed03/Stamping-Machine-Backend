@@ -230,7 +230,7 @@ export const generateCertificatePDF = ({
       .font("Helvetica")
       .text(fingerprint, leftMargin, y, {
         width: doc.page.width - leftMargin * 2, // use full page width
-        align: "left",
+        align: "right",
       });
 
     y = doc.y + rowSpacing;

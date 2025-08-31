@@ -187,7 +187,7 @@ const uploadWork = asyncHandler(async (req, res) => {
       id: workCertificateData._id,
       displayed_id: displayedID,
       title: workTitle,
-      registration_date: workCertificateData.registeration_date,
+      registration_date: formatDateForCertificate(workCertificateData.registeration_date),
       fingerprint,
       certificate_url: certificateUrl,
       ots_url: otsUrl,

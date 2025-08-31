@@ -119,9 +119,6 @@ const uploadWork = asyncHandler(async (req, res) => {
     originalFileUrl,
   });
 
-  console.log("Done")
-  return
-
 
   // 🔐 Step: Create OTS file using Python-based stamping
   let otsFilePath;

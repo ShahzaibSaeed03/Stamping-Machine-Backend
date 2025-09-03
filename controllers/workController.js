@@ -17,9 +17,7 @@ import Counter from "../models/counterModel.js";
 import fs from "fs";
 import path from "path";
 
-// @desc    Get all works
-// @route   GET /api/works
-// @access  Private
+// GET ALL WORKS CONTROLLER
 const getAllWorks = asyncHandler(async (req, res) => {
   const works = await Work.find({})
     .populate("id_client", "name email") // Populate user info
@@ -195,7 +193,7 @@ const uploadWork = asyncHandler(async (req, res) => {
   });
 });
 
-// Verify Work Controller
+// VERIFY WORK CONTROLLER
 const verifyWorkRegistration = asyncHandler(async (req, res) => {
   const files = req.files;
   if (!files || !files.originalFile || !files.certificate || !files.ots) {

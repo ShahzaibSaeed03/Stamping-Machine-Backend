@@ -1,11 +1,9 @@
-// middlewares/multerErrorMiddleware.js
-
 const multerErrorMiddleware = (err, req, res, next) => {
   if (err) {
     // Rejection for specific extensions like .exe or .js
     if (err.message.includes(".exe") || err.message.includes("JavaScript")) {
       return res.status(400).json({
-        error: "We don't accept .exe or JavaScript files.",
+        error: "We don't accept .exe or .js files.",
       });
     }
 

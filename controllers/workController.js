@@ -290,7 +290,7 @@ const verifyWorkRegistration = asyncHandler(async (req, res) => {
     const work = await Work.findOne({ file_fingerprint: fileFingerprint });
     if (!work) {
       return res.status(404).json({
-        error: "This certificate is not in our database.",
+        error: "File doesn't match the certificate. The uploaded file and certificate are different. Please upload the related files.",
       });
     }
 

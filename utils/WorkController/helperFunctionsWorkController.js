@@ -99,7 +99,7 @@ export const formatDateForCertificate = (date = new Date()) => {
   const second = String(date.getUTCSeconds()).padStart(2, "0");
 
   // return `${day} ${month} ${year} at ${hour}:${minute}:${second} UTC`;
-  return `${day} ${month} ${year} at ${hour}:${minute}`;
+  return `${day} ${month} ${year} at ${hour}:${minute} UTC`;
 };
 
 // GENERATE CERTIFICATE PDF FUNCTION

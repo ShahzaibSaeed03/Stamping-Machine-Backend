@@ -98,7 +98,8 @@ export const formatDateForCertificate = (date = new Date()) => {
   const minute = String(date.getUTCMinutes()).padStart(2, "0");
   const second = String(date.getUTCSeconds()).padStart(2, "0");
 
-  return `${day} ${month} ${year} at ${hour}:${minute}:${second} UTC`;
+  // return `${day} ${month} ${year} at ${hour}:${minute}:${second} UTC`;
+  return `${day} ${month} ${year} at ${hour}:${minute}`;
 };
 
 // GENERATE CERTIFICATE PDF FUNCTION
@@ -216,7 +217,7 @@ export const generateCertificatePDF = ({
       y += rowSpacing;  // 👈 adds one blank line
     }
 
-    drawRow("Reference number", displayedID);
+    drawRow("Reference Number", displayedID);
     drawRow("Registration Date", formatDateForCertificate());
     drawRow("Timestamping Authority", "Open Timestamps");
 
@@ -225,7 +226,7 @@ export const generateCertificatePDF = ({
     // } else {
     //   drawRow("Copyrighted File name", originalFileName);
     // }
-    drawRow("Copyrighted File name", originalFileName);
+    drawRow("Copyrighted File Name", originalFileName);
 
     // // SHA fingerprint with wrapping
     // doc
@@ -239,7 +240,7 @@ export const generateCertificatePDF = ({
     // SHA fingerprint on its own full-width line
     doc
       .font("Helvetica-Bold")
-      .text("File SHA256 fingerprint:", leftMargin, y);
+      .text("File SHA256 Fingerprint:", leftMargin, y);
 
     y = doc.y + 8; // vertical gap
 

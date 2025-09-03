@@ -65,7 +65,7 @@ const uploadWork = asyncHandler(async (req, res) => {
   // Reject .js and .exe files explicitly
   const ext = path.extname(file.originalname).toLowerCase();
   if (ext === ".js" || ext === ".exe") {
-    return res.status(400).json({ error: ".js and .exe files are not accepted" });
+    return res.status(400).json({ error: "We don't accept .js and .exe files." });
   }
 
   const user = req.user;
@@ -119,7 +119,6 @@ const uploadWork = asyncHandler(async (req, res) => {
     originalFileName: file.originalname,
     originalFileUrl,
   });
-
 
   // 🔐 Step: Create OTS file using Python-based stamping
   let otsFilePath;

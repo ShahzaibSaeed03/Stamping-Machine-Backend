@@ -234,12 +234,6 @@ const verifyWorkRegistration = asyncHandler(async (req, res) => {
     displayedID = path.basename(certificatePath).split(".")[0];
   }
 
-  // Debug logging
-  if (process.env.NODE_ENV === "development") {
-    console.log("Certificate filename:", certFileName);
-    console.log("Extracted displayedID:", displayedID);
-  }
-
   // For verification, we need to use the original naming that OTS expects
   // OTS verification expects: {displayedID}.pdf and {displayedID}.pdf.ots
   const newCertPath = path.join(

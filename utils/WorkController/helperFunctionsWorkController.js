@@ -96,7 +96,7 @@ export const formatDateForCertificate = (date = new Date()) => {
   const year = date.getFullYear();
   const hour = String(date.getUTCHours()).padStart(2, "0");
   const minute = String(date.getUTCMinutes()).padStart(2, "0");
-  const second = String(date.getUTCSeconds()).padStart(2, "0");
+  // const second = String(date.getUTCSeconds()).padStart(2, "0");
 
   // return `${day} ${month} ${year} at ${hour}:${minute}:${second} UTC`;
   return `${day} ${month} ${year} at ${hour}:${minute} UTC`;
@@ -448,19 +448,44 @@ export const extractFingerprintFromPDF = async (
       throw new Error(`PDF file not found at path: ${pdfPath}`);
     }
 
-    const dataBuffer = fs.readFileSync(pdfPath);
-    const data = await pdfParse(dataBuffer);
+    // Try Strategy 1: Primary pdf-parse method using findFingerprintInText
+    try {
+      const dataBuffer = fs.readFileSync(pdfPath);
+      const data = await pdfParse(dataBuffer);
 
-    // Match 'File SHA256 fingerprint' line, allowing for flexible spacing
-    const match = data.text.match(
-      /File\s+SHA256\s+fingerprint\s*:\s*([a-fA-F0-9]{64})/
-    );
 
-    if (match && match[1]) {
-      return match[1];
-    } else {
-      throw new Error("SHA256 fingerprint not found in PDF text.");
+      // Use the utility function for pattern matching
+      const fingerprint = findFingerprintInText(data.text);
+      if (fingerprint && process.env.NODE_ENV === "development") {
+        console.log("✅ Successfully extracted fingerprint using primary method:", fingerprint);
+        return fingerprint;
+      }
+    } catch (primaryError) {
     }
+
+    // If primary method fails, try all fallback strategies
+
+    const strategies = [
+      extractWithPdfParse,
+      extractAsTextFile,
+      extractWithPdfParseOptions,
+      extractWithRepair,
+      extractWithUtilities
+    ];
+
+    for (let i = 0; i < strategies.length; i++) {
+      try {
+        const result = await retryWithBackoff(strategies[i]);
+        if (result) {
+          console.log(`✅ Strategy ${i + 1} succeeded with fingerprint: ${result}`);
+          return result;
+        }
+      } catch (strategyError) {
+        continue;
+      }
+    }
+
+    throw new Error("All extraction strategies failed");
   } catch (error) {
     console.error(
       `Failed to extract fingerprint after all strategies: ${error.message}`

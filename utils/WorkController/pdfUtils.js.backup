@@ -112,38 +112,23 @@ export const extractTextFromPDF = async (filePath) => {
  * @returns {string|null} - Found fingerprint or null
  */
 export const findFingerprintInText = (textContent) => {
-      
-  // Enhanced patterns that handle both same-line and multi-line fingerprints
   const patterns = [
-    // Same-line patterns (case-insensitive for better matching)
-    /File\s+SHA256\s+[Ff]ingerprint\s*:\s*([a-fA-F0-9]{64})/i,
-    /SHA256\s+[Ff]ingerprint\s*:\s*([a-fA-F0-9]{64})/i,
-    /[Ff]ingerprint\s*:\s*([a-fA-F0-9]{64})/i,
+    /File\s+SHA256\s+fingerprint\s*:\s*([a-fA-F0-9]{64})/,
+    /SHA256\s+fingerprint\s*:\s*([a-fA-F0-9]{64})/i,
+    /fingerprint\s*:\s*([a-fA-F0-9]{64})/i,
     /SHA256\s*:\s*([a-fA-F0-9]{64})/i,
-    
-    // Multi-line patterns - handle cases where fingerprint is on next line
-    /File\s+SHA256\s+[Ff]ingerprint\s*:\s*[\r\n\s]*([a-fA-F0-9]{64})/i,
-    /SHA256\s+[Ff]ingerprint\s*:\s*[\r\n\s]*([a-fA-F0-9]{64})/i,
-    /[Ff]ingerprint\s*:\s*[\r\n\s]*([a-fA-F0-9]{64})/i,
-    
-    // Fallback: find any 64-char hex string near fingerprint keywords
-    /(?:File\s+SHA256\s+[Ff]ingerprint|SHA256\s+[Ff]ingerprint|[Ff]ingerprint)[\s\S]{0,100}?([a-fA-F0-9]{64})/i,
-    
-    // Last resort: find any standalone 64-char hex string
-    /([a-fA-F0-9]{64})/
+    /([a-fA-F0-9]{64})/, // Last resort: find any 64-char hex string
   ];
 
-  for (let i = 0; i < patterns.length; i++) {
-    const pattern = patterns[i];
-        
+  for (const pattern of patterns) {
     const match = textContent.match(pattern);
     if (match && match[1]) {
-      console.log(`✅ Found fingerprint using pattern ${i + 1}: ${match[1]}`);
+      console.log(`Found fingerprint using pattern: ${pattern}`);
       return match[1];
     }
   }
 
-    return null;
+  return null;
 };
 
 /**

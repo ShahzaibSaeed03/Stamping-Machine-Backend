@@ -26,7 +26,8 @@ const generateSignedUrl = async (keyOrUrl) => {
   }
 
   const command = new GetObjectCommand({
-    Bucket: process.env.AWS_BUCKET_NAME,
+    Bucket: process.env.DO_SPACE_NAME
+,
     Key: key,
   });
 

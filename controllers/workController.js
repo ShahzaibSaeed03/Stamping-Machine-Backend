@@ -7,7 +7,6 @@ import {
   extractFingerprintFromPDF,
   formatDateForCertificate
 } from "../utils/WorkController/helperFunctionsWorkController.js";
-import { uploadToAWS } from "../utils/WorkController/uploadToAWS.js";
 import { uploadToS3 } from "../utils/WorkController/awsUtils.js";
 import { saveToDatabase } from "../utils/WorkController/saveToDatabase.js";
 import { sendConfirmationEmail } from "../utils/WorkController/sendConfirmationEmail.js";
@@ -129,12 +128,23 @@ const uploadWork = asyncHandler(async (req, res) => {
   }
 
   // Upload files to AWS
-  const s3Links = await uploadToAWS({
-    originalFile: file.path,
-    certificateFile: certificatePath,
-    otsFile: otsFilePath,
-    displayedID,
-  });
+// Upload certificate
+const certFileUrl = await uploadToS3(
+  { path: certificatePath, originalname: `Certificate-${displayedID}.pdf` },
+  "certificates"
+);
+
+// Upload ots
+const otsFileUrl = await uploadToS3(
+  { path: otsFilePath, originalname: `Timestamp-${displayedID}.ots` },
+  "ots"
+);
+
+const s3Links = {
+  fileUrl: originalFileUrl,
+  certUrl: certFileUrl,
+  otsUrl: otsFileUrl,
+};
 
   const workCertificateData = await saveToDatabase({
     id_client: user._id,

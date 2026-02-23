@@ -1,5 +1,5 @@
 import express from "express";
-import { uploadWork, verifyWorkRegistration, getAllWorks, getWorksByUser } from "../controllers/workController.js";
+import { uploadWork, verifyWorkRegistration, getAllWorks, getWorksByUser ,deleteWork} from "../controllers/workController.js";
 import {uploadMiddleware, validateSingleZipAndContents, verifyUploadMiddleware} from "../middlewares/uploadMiddleware.js";
 import multerErrorMiddleware from "../middlewares/multerErrorHandlerMiddleware.js";
 import {userAuthMiddleware} from "../middlewares/authMiddleware.js"
@@ -21,7 +21,7 @@ router.post(
   validateSingleZipAndContents, // To check the zip file content
   uploadWork
 );
-
+router.delete("/:id", userAuthMiddleware, deleteWork);
 // Verification route
 router.post(
   "/verify",

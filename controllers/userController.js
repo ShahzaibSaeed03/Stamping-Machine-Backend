@@ -106,36 +106,55 @@ export const getProfile = asyncHandler(async (req, res) => {
 });
 /* UPDATE PROFILE */
 
-export const updateProfile = asyncHandler(async (req, res) => {
+export const updateProfile = asyncHandler(async (req,res)=>{
 
-  const user = await User.findById(req.user._id);
+const user = await User.findById(req.user._id);
+if(!user) throw new Error("User not found");
 
-  if (!user) {
-    res.status(404);
-    throw new Error("User not found");
-  }
+const {
+firstName,
+lastName,
+companyName,
+ownerName,
+country,
+state,
+personalAddress,
+billing
+}=req.body;
 
-  const {
-    firstName,
-    lastName,
-    companyName,
-    ownerName,
-    country,
-    state
-  } = req.body;
+/* BASIC */
 
-  user.firstName = firstName ?? user.firstName;
-  user.lastName = lastName ?? user.lastName;
-  user.companyName = companyName ?? user.companyName;
-  user.ownerName = ownerName ?? user.ownerName;
-  user.country = country ?? user.country;
-  user.state = state ?? user.state;
+user.firstName = firstName ?? user.firstName;
+user.lastName = lastName ?? user.lastName;
+user.companyName = companyName ?? user.companyName;
+user.ownerName = ownerName ?? user.ownerName;
+user.country = country ?? user.country;
+user.state = state ?? user.state;
 
-  const updated = await user.save();
-const safeUser = updated.toObject();
-delete safeUser.password;
+/* PERSONAL ADDRESS */
 
-  res.status(200).json(updated);
+if(personalAddress){
+user.personalAddress = {
+...user.personalAddress.toObject(),
+...personalAddress
+};
+}
+
+/* BILLING */
+
+if(billing){
+user.billing = {
+...user.billing.toObject(),
+...billing
+};
+}
+
+await user.save();
+
+const safe=user.toObject();
+delete safe.password;
+
+res.json(safe);
 });
 export const changePassword = asyncHandler(async (req, res) => {
 
@@ -232,4 +251,6 @@ export const verifyEmailChange = asyncHandler(async (req, res) => {
 
   res.status(200).json({ message: "Email updated successfully" });
 });
+
+
 export { registerUser, loginUser, allUser };

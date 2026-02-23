@@ -5,181 +5,203 @@ import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import { generateSignedUrl } from "../utils/generateSignedUrl.js";
 
-// Create a share link for a work
-const createShareLink = asyncHandler(async (req, res) => {
-  const { workId, expiryDays = 7, password } = req.body; // Default 7 days expiry, optional password
-  const user = req.user;
 
-  // Password is required
-  if (!password || password.trim() === "") {
-    return res.status(400).json({
-      error: "Password is required to create a share link.",
-    });
-  }
+/*
+SET PASSWORD
+*/
+export const setSharePassword = asyncHandler(async (req,res)=>{
 
-  // Password validation rules
-  if (password.length < 6) {
-    return res.status(400).json({
-      error: "Password must be at least 6 characters long.",
-    });
-  }
+const {workId,password}=req.body;
+const user=req.user;
 
-  if (password.length > 50) {
-    return res.status(400).json({
-      error: "Password must not exceed 50 characters.",
-    });
-  }
+if(!password || password.length<6)
+throw new Error("Password min 6");
 
-  // Find the work and verify ownership
-  const work = await Work.findById(workId);
-  if (!work) {
-    res.status(404);
-    throw new Error("Work not found");
-  }
+const work=await Work.findById(workId);
+if(!work) throw new Error("Work not found");
 
-  if (work.id_client.toString() !== user._id.toString()) {
-    res.status(403);
-    throw new Error("Not authorized to share this work");
-  }
+if(work.id_client.toString()!==user._id.toString())
+throw new Error("Unauthorized");
 
-  // Generate a secure random string for the share link
-  const sha256_string = crypto.randomBytes(32).toString("hex");
+let share=await SharedWork.findOne({id_work:workId});
 
-  // Calculate expiry date
-  // const end_date = new Date();
-  // end_date.setDate(end_date.getDate() + expiryDays);
-  const end_date = new Date();
-  end_date.setMinutes(end_date.getMinutes() + 10);
+const hash=await bcrypt.hash(password,10);
+const token=crypto.randomBytes(32).toString("hex");
 
-  // Hash password if provided
-  let password_hash = null;
-  if (password) {
-    password_hash = await bcrypt.hash(password, 10);
-  }
+if(share){
+share.password_hash=hash;
+share.sha256_string=token;
+share.end_date=new Date(Date.now()+7*24*60*60*1000);
+await share.save();
+}else{
+share=await SharedWork.create({
+id_work:workId,
+password_hash:hash,
+sha256_string:token,
+end_date:new Date(Date.now()+7*24*60*60*1000)
+});
+}
 
-  // Create share record
-  const sharedWork = await SharedWork.create({
-    id_work: workId,
-    end_date,
-    sha256_string,
-    password_hash,
-  });
-
-  res.status(201).json({
-    id: sharedWork._id,
-    message: "Share link created successfully",
-    shareUrl: `${process.env.FRONTEND_URL}/shared/${sha256_string}`,
-    expiryDate: end_date,
-    passwordProtected: !!password,
-  });
+res.json({
+message:"Password set",
+shareId:share.sha256_string,
+shareUrl:`${process.env.FRONTEND_URL}/shared/${share.sha256_string}`
 });
 
-// Get work by share link
-const getSharedWork = asyncHandler(async (req, res) => {
-  const { shareId } = req.params;
-  const { password } = req.body; // frontend sends password here if required
-
-  // Find the share record
-  const sharedWork = await SharedWork.findOne({
-    sha256_string: shareId,
-  }).populate({
-    path: "id_work",
-    populate: {
-      path: "id_certificate", // Populate the certificate reference to get its id_file
-    },
-  });
-
-  if (!sharedWork) {
-    res.status(404);
-    throw new Error("Share link not found or expired");
-  }
-
-  // If password protection enabled, verify
-  if (sharedWork.password_hash) {
-    if (!password) {
-      res.status(401);
-      throw new Error("Password required to access this share");
-    }
-    const valid = await bcrypt.compare(password, sharedWork.password_hash);
-    if (!valid) {
-      res.status(403);
-      throw new Error("Invalid password");
-    }
-  }
-
-  // Generate signed URLs for the work file, certificate, and OTS file
-  const fileSignedUrl = await generateSignedUrl(sharedWork.id_work.id_file);
-  const certificateSignedUrl = await generateSignedUrl(
-    sharedWork.id_work.id_certificate.id_file
-  );
-
-  // Generate signed URL for OTS file if it exists
-  let otsSignedUrl = null;
-  if (sharedWork.id_work.id_ots) {
-    otsSignedUrl = await generateSignedUrl(sharedWork.id_work.id_ots);
-  }
-
-  res.json({
-    success: true,
-    data: {
-      title: sharedWork.id_work.title,
-      file_name: sharedWork.id_work.file_name,
-      downloadUrl: fileSignedUrl,
-      certificateUrl: certificateSignedUrl,
-      otsUrl: otsSignedUrl, // Include OTS file URL
-    },
-  });
 });
 
-// List all shares for a work
-const listWorkShares = asyncHandler(async (req, res) => {
-  const { workId } = req.params;
-  const user = req.user;
 
-  // Verify work ownership
-  const work = await Work.findById(workId);
-  if (!work || work.id_client.toString() !== user._id.toString()) {
-    res.status(404);
-    throw new Error("Work not found or unauthorized");
-  }
+/*
+GET SHARE LINK
+*/
+export const createShareLink = asyncHandler(async(req,res)=>{
 
-  // Get all active shares
-  const shares = await SharedWork.find({
-    id_work: workId,
-    end_date: { $gt: new Date() },
-  });
+const {workId}=req.body;
 
-  res.json({
-    shares: shares.map((share) => ({
-      id: share._id,
-      shareUrl: `${process.env.FRONTEND_URL}/shared/${share.sha256_string}`,
-      expiryDate: share.end_date,
-      passwordProtected: !!share.password_hash,
-    })),
-  });
+const share=await SharedWork.findOne({id_work:workId});
+if(!share) throw new Error("Set password first");
+
+res.json({
+shareUrl:`${process.env.FRONTEND_URL}/shared/${share.sha256_string}`
 });
 
-// Delete a share
-const deleteShare = asyncHandler(async (req, res) => {
-  const { shareId } = req.params;
-  const user = req.user;
-
-  const share = await SharedWork.findById(shareId).populate("id_work");
-
-  if (!share) {
-    res.status(404);
-    throw new Error("Share not found");
-  }
-
-  // Verify ownership of the work
-  if (share.id_work.id_client.toString() !== user._id.toString()) {
-    res.status(403);
-    throw new Error("Not authorized to delete this share");
-  }
-
-  await SharedWork.findByIdAndDelete(shareId);
-
-  res.json({ message: "Share deleted successfully" });
 });
 
-export { createShareLink, getSharedWork, listWorkShares, deleteShare };
+
+/*
+ACCESS SHARED WORK (LINK)
+*/
+export const getSharedWork = asyncHandler(async (req,res)=>{
+
+const {shareId}=req.params;
+const {password}=req.body;
+
+const sharedWork=await SharedWork.findOne({
+sha256_string:shareId
+}).populate({
+path:"id_work",
+populate:{path:"id_certificate"}
+});
+
+if(!sharedWork) throw new Error("Share not found");
+
+if(sharedWork.end_date < new Date())
+throw new Error("Link expired");
+
+if(sharedWork.password_hash){
+if(!password) throw new Error("Password required");
+
+const ok=await bcrypt.compare(password,sharedWork.password_hash);
+if(!ok) throw new Error("Invalid password");
+}
+
+const work=sharedWork.id_work;
+
+const fileUrl=await generateSignedUrl(work.id_file);
+const certUrl=await generateSignedUrl(work.id_certificate.id_file);
+const otsUrl=work.id_ots ? await generateSignedUrl(work.id_ots) : null;
+
+res.json({
+success:true,
+data:{
+title:work.title,
+file_name:work.file_name,
+downloadUrl:fileUrl,
+certificateUrl:certUrl,
+otsUrl
+}
+});
+
+});
+
+
+/*
+ACCESS BY REFERENCE (FIXED)
+*/
+export const accessByReference = asyncHandler(async (req,res)=>{
+
+const {reference,password}=req.body;
+
+if(!reference) throw new Error("Reference required");
+
+const work = await Work.findOne({displayed_ID:reference})
+.populate("id_certificate");
+
+if(!work) throw new Error("Work not found");
+
+const share = await SharedWork.findOne({id_work:work._id});
+if(!share) throw new Error("No password set");
+
+if(share.end_date < new Date())
+throw new Error("Link expired");
+
+if(!password) throw new Error("Password required");
+
+const valid = await bcrypt.compare(password,share.password_hash);
+if(!valid) throw new Error("Invalid password");
+
+const fileUrl = await generateSignedUrl(work.id_file);
+const certUrl = await generateSignedUrl(work.id_certificate.id_file);
+const otsUrl = work.id_ots ? await generateSignedUrl(work.id_ots) : null;
+
+res.json({
+success:true,
+data:{
+title:work.title,
+file_name:work.file_name,
+downloadUrl:fileUrl,
+certificateUrl:certUrl,
+otsUrl
+}
+});
+
+});
+
+
+/*
+LIST SHARES
+*/
+export const listWorkShares = asyncHandler(async (req,res)=>{
+
+const {workId}=req.params;
+const user=req.user;
+
+const work=await Work.findById(workId);
+if(!work || work.id_client.toString()!==user._id.toString())
+throw new Error("Unauthorized");
+
+const shares=await SharedWork.find({
+id_work:workId,
+end_date:{$gt:new Date()}
+});
+
+res.json({
+shares:shares.map(s=>({
+id:s._id,
+shareUrl:`${process.env.FRONTEND_URL}/shared/${s.sha256_string}`,
+expiryDate:s.end_date,
+passwordProtected:!!s.password_hash
+}))
+});
+
+});
+
+
+/*
+DELETE SHARE
+*/
+export const deleteShare = asyncHandler(async (req,res)=>{
+
+const {shareId}=req.params;
+const user=req.user;
+
+const share=await SharedWork.findById(shareId).populate("id_work");
+if(!share) throw new Error("Share not found");
+
+if(share.id_work.id_client.toString()!==user._id.toString())
+throw new Error("Unauthorized");
+
+await SharedWork.findByIdAndDelete(shareId);
+
+res.json({message:"Share deleted"});
+});

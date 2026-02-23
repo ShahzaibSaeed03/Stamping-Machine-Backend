@@ -171,7 +171,7 @@ const s3Links = {
   const signedOriginalFileUrl = await generateSignedUrl(s3Links.fileUrl);
   const otsUrl = await generateSignedUrl(s3Links.otsUrl);
 
-  await sendConfirmationEmail(user.email, workTitle);
+  // await sendConfirmationEmail(user.email, workTitle);
 
   // res.status(201).json({
   //   message: "Work uploaded and registered",
@@ -206,6 +206,7 @@ const s3Links = {
 // VERIFY WORK CONTROLLER
 const verifyWorkRegistration = asyncHandler(async (req, res) => {
   const files = req.files;
+
   if (!files || !files.originalFile || !files.certificate || !files.ots) {
     return res.status(400).json({
       error:
@@ -213,198 +214,163 @@ const verifyWorkRegistration = asyncHandler(async (req, res) => {
     });
   }
 
-  // Reject .js and .exe uploads for any of the provided files
-  const fieldsToCheck = ['originalFile', 'certificate', 'ots'];
+  const fieldsToCheck = ["originalFile", "certificate", "ots"];
   for (const field of fieldsToCheck) {
-    const originalname = files[field][0].originalname || '';
+    const originalname = files[field][0].originalname || "";
     const ext = path.extname(originalname).toLowerCase();
-    if (ext === '.js' || ext === '.exe') {
-      return res.status(400).json({ error: '.js and .exe files are not accepted' });
+    if (ext === ".js" || ext === ".exe") {
+      return res
+        .status(400)
+        .json({ error: ".js and .exe files are not accepted" });
     }
   }
 
-  // Get original paths
   const filePath = files.originalFile[0].path;
   const certificatePath = files.certificate[0].path;
   const otsPath = files.ots[0].path;
 
-  // Extract the displayedID from the certificate filename
-  // Certificate should be named: Certificate-{displayedID}.pdf
-  const certFileName = path.basename(certificatePath);
-  let displayedID;
-
-  if (certFileName.startsWith('Certificate-')) {
-    // Remove 'Certificate-' prefix and '.pdf' extension
-    displayedID = certFileName.replace('Certificate-', '').replace('.pdf', '');
-  } else if (certFileName.startsWith('Timestamp-')) {
-    // Handle case where someone uploads the OTS file as certificate
-    displayedID = certFileName.replace('Timestamp-', '').replace('.ots', '');
-  } else {
-    // Fallback: extract from the original filename
-    displayedID = path.basename(certificatePath).split(".")[0];
-  }
-
-  // For verification, we need to use the original naming that OTS expects
-  // OTS verification expects: {displayedID}.pdf and {displayedID}.pdf.ots
-  const newCertPath = path.join(
-    path.dirname(certificatePath),
-    `${displayedID}.pdf`
-  );
-  const newOtsPath = path.join(path.dirname(otsPath), `${displayedID}.pdf.ots`);
-
-  // Rename files to the format that OTS verification expects
-  // This handles both prefixed and non-prefixed uploaded files
-  if (certificatePath !== newCertPath) {
-    fs.renameSync(certificatePath, newCertPath);
-  }
-  if (otsPath !== newOtsPath) {
-    fs.renameSync(otsPath, newOtsPath);
-  }
-
+  // 1️⃣ fingerprint original file
   let fileFingerprint;
   try {
     fileFingerprint = await computeSHA256(filePath);
   } catch (err) {
-    console.error("Error computing file fingerprint:", err);
     return res
       .status(400)
       .json({ error: "Failed to calculate fingerprint of the file." });
   }
 
+  // 2️⃣ fingerprint certificate
   let certFingerprint;
   try {
-    certFingerprint = await extractFingerprintFromPDF(newCertPath);
-    if (process.env.NODE_ENV === "development") {
-      console.log(
-        "Successfully extracted certificate fingerprint:",
-        certFingerprint
-      );
-    }
+    certFingerprint = await extractFingerprintFromPDF(certificatePath);
   } catch (err) {
-    console.error("Error extracting fingerprint from PDF:", err);
     return res.status(400).json({
       error:
         "File doesn't match the certificate. (Fingerprint not found in certificate)",
     });
   }
 
+  // 3️⃣ compare fingerprints
   if (fileFingerprint !== certFingerprint) {
-    // File doesn't match the certificate - this is an error case
-    // Check if the certificate exists in our database
-    const work = await Work.findOne({ file_fingerprint: fileFingerprint });
-    if (!work) {
-      return res.status(404).json({
-        error: "File doesn't match the certificate. The uploaded file and certificate are different. Please upload the related files.",
-      });
-    }
-
-    // Return error status - no need to verify OTS when files don't match
     return res.status(400).json({
-      error: "File doesn't match the certificate. The uploaded file and certificate have different fingerprints.",
-      details: {
-        fileFingerprint,
-        certFingerprint,
-        message: "Certificate exists in database but file mismatch detected"
-      }
+      error:
+        "File doesn't match the certificate. The uploaded file and certificate have different fingerprints.",
+      details: { fileFingerprint, certFingerprint },
     });
   }
 
+  // 4️⃣ find work
   const work = await Work.findOne({ file_fingerprint: fileFingerprint });
   if (!work) {
-    return res.status(404).json({
-      error: "This certificate is not in our database.",
-    });
+    return res
+      .status(404)
+      .json({ error: "This certificate is not in our database." });
   }
 
+  // 5️⃣ verify OTS (NO rename)
+  const otsResult = await verifyOTS(certificatePath, otsPath);
 
-  let otsResult = await verifyOTS(newCertPath, newOtsPath);
-
-  // Enrich verified anchors with readable UTC timestamps
-  // if (otsResult && otsResult.status === "verified" && Array.isArray(otsResult.anchors)) {
-  //   const enriched = [];
-  //   for (const anchor of otsResult.anchors) {
-  //     const blockData = await getBlockByHeight(anchor.block);
-  //     if (blockData && typeof blockData.timestamp === "number") {
-  //       const readable = new Date(blockData.timestamp * 1000)
-  //         .toISOString()
-  //         .replace("T", " ")
-  //         .replace("Z", " UTC");
-  //       enriched.push({ ...anchor, timestamp: readable });
-  //     } else {
-  //       enriched.push(anchor);
-  //     }
-  //   }
-  //   otsResult = { ...otsResult, anchors: enriched };
-  // }
-
-  // Clean up temporary files after verification
+  // cleanup temp files
   try {
-    fs.unlinkSync(newCertPath);
-    fs.unlinkSync(newOtsPath);
     fs.unlinkSync(filePath);
-  } catch (err) {
-    console.error("Error cleaning up temporary files:", err);
-  }
+    fs.unlinkSync(certificatePath);
+    fs.unlinkSync(otsPath);
+  } catch (err) {}
 
   return res.status(200).json({
-    message: "Verification successful.",
+    message:
+      otsResult.status === "verified"
+        ? "Timestamp verified on Bitcoin network."
+        : otsResult.status === "pending"
+        ? "Timestamp submitted. Waiting for Bitcoin confirmation."
+        : "Verification failed.",
     otsStatus: otsResult,
-    registeration_date: formatDateForCertificate(work.registeration_date)
+    registeration_date: formatDateForCertificate(work.registeration_date),
   });
 });
 
 // @desc    Get works for a specific user
 // @route   GET /api/works/user/:userId
 // @access  Private
-const getWorksByUser = asyncHandler(async (req, res) => {
-  const { userId } = req.params;
+const getWorksByUser = asyncHandler(async (req,res)=>{
 
-  // Check if the user is requesting their own works or if they have admin privileges
-  if (req.user._id.toString() !== userId && req.user.role !== "admin") {
-    return res.status(403).json({
-      success: false,
-      error: "You can only view your own works",
-    });
-  }
+const {userId}=req.params;
 
-  const works = await Work.find({ id_client: userId, status: true })
-    .populate("id_client", "name email")
-    .populate("id_certificate", "certificate_name registration_date TSA")
-    .sort({ registeration_date: -1 });
+const works = await Work.find({ id_client:userId, status:true })
+.populate("id_client","email")
+.populate("id_certificate")   // IMPORTANT → we need id_file from certificate
+.sort({ registeration_date:-1 });
 
-  if (!works || works.length === 0) {
-    return res.status(404).json({
-      success: false,
-      error: "No works found for this user",
-    });
-  }
+const data = await Promise.all(
+works.map(async(work)=>{
 
-  res.json({
-    success: true,
-    count: works.length,
-    data: works.map((work) => ({
-      _id: work._id,
-      title: work.title,
-      copyright_owner: work.copyright_owner,
-      additional_copyright_owners: work.additional_copyright_owners,
-      displayed_ID: work.displayed_ID,
-      registration_date: work.registeration_date,
-      file_name: work.file_name,
-      status: work.status,
-      client: {
-        _id: work.id_client._id,
-        name: work.id_client.name,
-        email: work.id_client.email,
-      },
-      certificate: {
-        _id: work.id_certificate._id,
-        name: work.id_certificate.certificate_name,
-        date: work.id_certificate.registration_date,
-        TSA: work.id_certificate.TSA,
-      },
-      otsUrl: work.id_ots, // Include OTS file URL
-    })),
-  });
+const downloadUrl = work.id_file
+? await generateSignedUrl(work.id_file)
+: null;
+
+const certificateUrl = work.id_certificate?.id_file
+? await generateSignedUrl(work.id_certificate.id_file)
+: null;
+
+const otsUrl = work.id_ots
+? await generateSignedUrl(work.id_ots)
+: null;
+
+return {
+_id:work._id,
+title:work.title,
+displayed_ID:work.displayed_ID,
+registration_date:work.registeration_date,
+file_name:work.file_name,
+status:work.status,
+
+downloadUrl,
+certificateUrl,
+otsUrl,
+
+client:{
+_id:work.id_client._id,
+email:work.id_client.email
+},
+
+certificate:{
+_id:work.id_certificate?._id,
+name:work.id_certificate?.certificate_name,
+date:work.id_certificate?.registration_date,
+TSA:work.id_certificate?.TSA
+}
+};
+})
+);
+
+res.json({
+success:true,
+count:data.length,
+data
 });
 
-export { uploadWork, verifyWorkRegistration, getAllWorks, getWorksByUser };
+});
+// DELETE WORK
+const deleteWork = asyncHandler(async (req,res)=>{
+
+const {id}=req.params;
+
+const work=await Work.findById(id);
+
+if(!work){
+res.status(404);
+throw new Error("Work not found");
+}
+
+/* owner check */
+if(work.id_client.toString()!==req.user._id.toString()){
+res.status(403);
+throw new Error("Unauthorized");
+}
+
+/* delete */
+await Work.findByIdAndDelete(id);
+
+res.json({message:"Work deleted"});
+});
+export { uploadWork, verifyWorkRegistration, getAllWorks, getWorksByUser,deleteWork };

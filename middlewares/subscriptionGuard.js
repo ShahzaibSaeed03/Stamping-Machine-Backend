@@ -12,10 +12,15 @@ const subscriptionGuard = asyncHandler(async (req, res, next) => {
 
   /* NOT ACTIVE */
 
-  if (user.subscriptionStatus !== "active") {
-    res.status(403);
-    throw new Error("Subscription inactive");
-  }
+ if (user.subscriptionStatus !== "active") {
+  res.status(403);
+  throw new Error("You need an active subscription to buy tokens.");
+}
+
+if (user.subscriptionEnd && new Date() > user.subscriptionEnd) {
+  res.status(403);
+  throw new Error("Your subscription has expired. Please renew to continue.");
+}
 
   /* EXPIRED */
 

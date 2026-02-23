@@ -4,7 +4,7 @@ import User from "../models/userModel.js";
 export const getSubscriptionStatus = asyncHandler(async (req, res) => {
 
   const user = await User.findById(req.user._id)
-    .select("tokens subscriptionEnds");
+    .select("tokens subscriptionEnd");
 
   if (!user) {
     res.status(404);
@@ -13,7 +13,7 @@ export const getSubscriptionStatus = asyncHandler(async (req, res) => {
 
   res.status(200).json({
     remainingTokens: user.tokens || 0,
-    nextBillingDate: user.subscriptionEnds || null
+    nextBillingDate: user.subscriptionEnd || null
   });
 
 });

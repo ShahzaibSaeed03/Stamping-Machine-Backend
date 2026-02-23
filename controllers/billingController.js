@@ -56,18 +56,18 @@ export const createCheckoutSession = asyncHandler(async (req, res) => {
   }
 
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-  const user = await User.findById(req.user._id);
 
+  const user = await User.findById(req.user._id);
   if (!user) throw new Error("User not found");
 
-  /* CREATE CUSTOMER ONCE */
+  /* ================= CREATE CUSTOMER ONCE ================= */
 
   let customerId = user.stripeCustomerId;
 
   if (!customerId) {
     const customer = await stripe.customers.create({
       email: user.email,
-      name: `${user.firstName} ${user.lastName}`
+      name: `${user.firstName || ""} ${user.lastName || ""}`.trim()
     });
 
     customerId = customer.id;
@@ -75,16 +75,37 @@ export const createCheckoutSession = asyncHandler(async (req, res) => {
     await user.save();
   }
 
+  /* ================= CREATE EMBEDDED CHECKOUT SESSION ================= */
+
   const session = await stripe.checkout.sessions.create({
+
     mode: "subscription",
+
+    ui_mode: "embedded",                 // ⭐ REQUIRED FOR EMBEDDED
+
     customer: customerId,
-    line_items: [{ price: process.env.STRIPE_PRICE_ID, quantity: 1 }],
-    success_url: `${process.env.CLIENT_URL}/billing/success`,
-    cancel_url: `${process.env.CLIENT_URL}/billing/cancel`,
-    metadata: { userId: user._id.toString() }
+
+    line_items: [
+      {
+        price: process.env.STRIPE_PRICE_ID,
+        quantity: 1
+      }
+    ],
+
+    metadata: {
+      userId: user._id.toString()
+    },
+
+    return_url: `${process.env.CLIENT_URL}/billing/success?session_id={CHECKOUT_SESSION_ID}`
+
   });
 
-  res.json({ url: session.url });
+  /* ================= RETURN CLIENT SECRET ================= */
+
+  res.json({
+    clientSecret: session.client_secret
+  });
+
 });
 
 export const resumeSubscription = asyncHandler(async (req, res) => {

@@ -138,14 +138,25 @@ const uploadWork = asyncHandler(async (req, res) => {
   /* SAVE DB */
   const workData = await saveToDatabase({
     id_client: user._id,
+    id_category: 1,          // ⭐ REQUIRED
+    workCounter,             // ⭐ REQUIRED
     displayed_ID: displayedID,
+    status: true,            // ⭐ REQUIRED
+
     title: workTitle,
     copyright_owner: copyrightOwner,
     additional_copyright_owners: additionalOwners || "",
     registeration_date: new Date(),
     file_name: file.originalname,
     file_fingerprint: fingerprint,
+
     s3_links: s3Links,
+
+    TSA: {
+      otsFilePath,
+      blockInfo: "Pending confirmation"
+    },
+
     otsFileUrl
   });
 
@@ -246,15 +257,15 @@ const verifyWorkRegistration = asyncHandler(async (req, res) => {
     fs.unlinkSync(filePath);
     fs.unlinkSync(certificatePath);
     fs.unlinkSync(otsPath);
-  } catch (err) {}
+  } catch (err) { }
 
   return res.status(200).json({
     message:
       otsResult.status === "verified"
         ? "Timestamp verified on Bitcoin network."
         : otsResult.status === "pending"
-        ? "Timestamp submitted. Waiting for Bitcoin confirmation."
-        : "Verification failed.",
+          ? "Timestamp submitted. Waiting for Bitcoin confirmation."
+          : "Verification failed.",
     otsStatus: otsResult,
     registeration_date: formatDateForCertificate(work.registeration_date),
   });
@@ -263,85 +274,85 @@ const verifyWorkRegistration = asyncHandler(async (req, res) => {
 // @desc    Get works for a specific user
 // @route   GET /api/works/user/:userId
 // @access  Private
-const getWorksByUser = asyncHandler(async (req,res)=>{
+const getWorksByUser = asyncHandler(async (req, res) => {
 
-const {userId}=req.params;
+  const { userId } = req.params;
 
-const works = await Work.find({ id_client:userId, status:true })
-.populate("id_client","email")
-.populate("id_certificate")   // IMPORTANT → we need id_file from certificate
-.sort({ registeration_date:-1 });
+  const works = await Work.find({ id_client: userId, status: true })
+    .populate("id_client", "email")
+    .populate("id_certificate")   // IMPORTANT → we need id_file from certificate
+    .sort({ registeration_date: -1 });
 
-const data = await Promise.all(
-works.map(async(work)=>{
+  const data = await Promise.all(
+    works.map(async (work) => {
 
-const downloadUrl = work.id_file
-? await generateSignedUrl(work.id_file)
-: null;
+      const downloadUrl = work.id_file
+        ? await generateSignedUrl(work.id_file)
+        : null;
 
-const certificateUrl = work.id_certificate?.id_file
-? await generateSignedUrl(work.id_certificate.id_file)
-: null;
+      const certificateUrl = work.id_certificate?.id_file
+        ? await generateSignedUrl(work.id_certificate.id_file)
+        : null;
 
-const otsUrl = work.id_ots
-? await generateSignedUrl(work.id_ots)
-: null;
+      const otsUrl = work.id_ots
+        ? await generateSignedUrl(work.id_ots)
+        : null;
 
-return {
-_id:work._id,
-title:work.title,
-displayed_ID:work.displayed_ID,
-registration_date:work.registeration_date,
-file_name:work.file_name,
-status:work.status,
+      return {
+        _id: work._id,
+        title: work.title,
+        displayed_ID: work.displayed_ID,
+        registration_date: work.registeration_date,
+        file_name: work.file_name,
+        status: work.status,
 
-downloadUrl,
-certificateUrl,
-otsUrl,
+        downloadUrl,
+        certificateUrl,
+        otsUrl,
 
-client:{
-_id:work.id_client._id,
-email:work.id_client.email
-},
+        client: {
+          _id: work.id_client._id,
+          email: work.id_client.email
+        },
 
-certificate:{
-_id:work.id_certificate?._id,
-name:work.id_certificate?.certificate_name,
-date:work.id_certificate?.registration_date,
-TSA:work.id_certificate?.TSA
-}
-};
-})
-);
+        certificate: {
+          _id: work.id_certificate?._id,
+          name: work.id_certificate?.certificate_name,
+          date: work.id_certificate?.registration_date,
+          TSA: work.id_certificate?.TSA
+        }
+      };
+    })
+  );
 
-res.json({
-success:true,
-count:data.length,
-data
-});
+  res.json({
+    success: true,
+    count: data.length,
+    data
+  });
 
 });
 // DELETE WORK
-const deleteWork = asyncHandler(async (req,res)=>{
+const deleteWork = asyncHandler(async (req, res) => {
 
-const {id}=req.params;
+  const { id } = req.params;
 
-const work=await Work.findById(id);
+  const work = await Work.findById(id);
 
-if(!work){
-res.status(404);
-throw new Error("Work not found");
-}
+  if (!work) {
+    res.status(404);
+    throw new Error("Work not found");
+  }
 
-/* owner check */
-if(work.id_client.toString()!==req.user._id.toString()){
-res.status(403);
-throw new Error("Unauthorized");
-}
+  /* owner check */
+  if (work.id_client.toString() !== req.user._id.toString()) {
+    res.status(403);
+    throw new Error("Unauthorized");
+  }
 
-/* delete */
-await Work.findByIdAndDelete(id);
+  /* delete */
+  await Work.findByIdAndDelete(id);
 
-res.json({message:"Work deleted"});
+  res.json({ message: "Work deleted" });
 });
-export { uploadWork, verifyWorkRegistration, getAllWorks, getWorksByUser,deleteWork };
+export { uploadWork, verifyWorkRegistration, getAllWorks, getWorksByUser, deleteWork };

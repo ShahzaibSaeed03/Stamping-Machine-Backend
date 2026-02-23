@@ -1,5 +1,6 @@
 import dotenv from "dotenv";
-dotenv.config({ path: "./.env" }); // ⭐ MUST be first
+dotenv.config({ path: "./.env" });
+import subscriptionRoutes from "./routes/subscriptionRoutes.js";
 
 import express from "express";
 import colors from "colors";
@@ -20,19 +21,28 @@ import stripeRoutes from "./routes/stripeRoutes.js";
 
 import { notFound, errorHandler } from "./middlewares/errorMiddlewares.js";
 
-// Ensure upload folder exists
+const app = express();
+const port = process.env.PORT || 5000;
+const __dirname = path.resolve();
+
+/* ensure upload folder */
 const uploadDir = path.join(process.cwd(), "work-uploads");
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
 
-// Connect DB
+/* DB */
 connectDB();
 
-const app = express();
-const port = process.env.PORT || 5000;
+/* static public */
+app.use(express.static(path.join(__dirname, "public")));
 
-// CORS
+/* ROOT HOMEPAGE */
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+/* CORS */
 const corsOptions = {
   origin: [
     "http://localhost:4200",
@@ -40,21 +50,15 @@ const corsOptions = {
     "https://mycopyrightally.com",
   ],
   credentials: true,
-  optionsSuccessStatus: 200,
 };
+app.use(cors(corsOptions));
 
-// Stripe webhook raw body
+/* Stripe raw */
 app.use("/api/webhook/stripe", express.raw({ type: "application/json" }));
 
-app.use(cors(corsOptions));
 app.use(express.json());
 
-// Health
-app.get("/", (req, res) => {
-  res.status(200).send("Welcome to Stamping App.");
-});
-
-// Routes
+/* Routes */
 app.use("/api/works", workRoutes);
 app.use("/api/shares", shareRoutes);
 app.use("/api/auth", authRoutes);
@@ -64,11 +68,12 @@ app.use("/api/stripe", stripeRoutes);
 app.use("/api/billing", billingRoutes);
 app.use("/api/webhook", webhookRoutes);
 
-// Error middlewares
+app.use("/api/subscription", subscriptionRoutes);
+/* errors */
 app.use(notFound);
 app.use(errorHandler);
 
-// Start
+/* start */
 app.listen(port, () => {
-  console.log(`Server is running on http://localhost:${port}`.magenta.bold);
+  console.log(`Server running → http://localhost:${port}`.magenta.bold);
 });

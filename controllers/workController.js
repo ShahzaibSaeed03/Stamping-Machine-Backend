@@ -12,8 +12,10 @@ import { saveToDatabase } from "../utils/WorkController/saveToDatabase.js";
 import { sendConfirmationEmail } from "../utils/WorkController/sendConfirmationEmail.js";
 import { generateSignedUrl } from "../utils/generateSignedUrl.js";
 import { verifyOTS, stampWithOTS, getBlockByHeight } from "../utils/WorkController/otsUtil.js";
+import { deductTokens } from "../services/token.service.js";
 import Counter from "../models/counterModel.js";
 import fs from "fs";
+
 import path from "path";
 
 // GET ALL WORKS CONTROLLER
@@ -52,26 +54,33 @@ const getAllWorks = asyncHandler(async (req, res) => {
 
 // UPLOAD WORK REGISTRATION CONTROLLER
 const uploadWork = asyncHandler(async (req, res) => {
+
   const file = req.file;
-  if (!file) {
+  if (!file) return res.status(400).json({ error: "No file uploaded." });
+
+  const user = req.user;
+
+  /* 🚨 TOKEN CHECK */
+  if (user.tokens < 1) {
     return res.status(400).json({
-      error: "No file uploaded.",
+      error: "Not enough tokens. Please buy tokens before uploading."
     });
   }
 
-  // Reject .js and .exe files explicitly
+  /* VALIDATE FILE */
   const ext = path.extname(file.originalname).toLowerCase();
   if (ext === ".js" || ext === ".exe") {
     return res.status(400).json({ error: "We don't accept .js and .exe files." });
   }
 
-  const user = req.user;
   const { workTitle, copyrightOwner, additionalOwners } = req.body;
   if (!workTitle || !copyrightOwner) {
-    return res.status(400).json({ error: "Please fill in work title and copyright owner fields." });
+    return res.status(400).json({
+      error: "Please fill in work title and copyright owner fields."
+    });
   }
 
-  // Ensure user has a sequential userSeq; if not, assign one atomically
+  /* USER SEQ */
   if (!user.userSeq && user.userSeq !== 0) {
     const counter = await Counter.findOneAndUpdate(
       { _id: "userSeq" },
@@ -82,30 +91,19 @@ const uploadWork = asyncHandler(async (req, res) => {
     await user.save();
   }
 
+  /* HASH */
   const fingerprint = await computeSHA256(file.path);
+
   const workCounter = await Work.countDocuments({ id_client: user._id });
   const displayedID = await generateDisplayedID(user.userSeq, workCounter);
 
-  const existingWork = await Work.findOne({ displayed_ID: displayedID });
-  if (existingWork) {
-    return res.status(409).json({
-      error: `A work with displayed ID "${displayedID}" already exists. Please try again.`,
-    });
-  }
+  /* UPLOAD ORIGINAL */
+  const originalFileUrl = await uploadToS3(
+    { path: file.path, originalname: file.originalname },
+    "files"
+  );
 
-  // First upload the original file to get its permanent URL for the certificate
-  let originalFileUrl;
-  try {
-    originalFileUrl = await uploadToS3(
-      { path: file.path, originalname: file.originalname },
-      "files"
-    );
-  } catch (err) {
-    return res
-      .status(500)
-      .json({ error: "Failed to upload original file to AWS" });
-  }
-
+  /* CERTIFICATE */
   const certificatePath = await generateCertificatePDF({
     workTitle,
     copyrightOwner,
@@ -114,44 +112,33 @@ const uploadWork = asyncHandler(async (req, res) => {
     displayedID,
     fingerprint,
     originalFileName: file.originalname,
-    originalFileUrl,
+    originalFileUrl
   });
 
-  // 🔐 Step: Create OTS file using Python-based stamping
-  let otsFilePath;
-  try {
-    otsFilePath = await stampWithOTS(certificatePath, displayedID);
-  } catch (error) {
-    return res
-      .status(500)
-      .json({ error: "Error generating .ots file using OpenTimestamps" });
-  }
+  /* OTS */
+  const otsFilePath = await stampWithOTS(certificatePath, displayedID);
 
-  // Upload files to AWS
-// Upload certificate
-const certFileUrl = await uploadToS3(
-  { path: certificatePath, originalname: `Certificate-${displayedID}.pdf` },
-  "certificates"
-);
+  /* UPLOAD CERT + OTS */
+  const certFileUrl = await uploadToS3(
+    { path: certificatePath, originalname: `Certificate-${displayedID}.pdf` },
+    "certificates"
+  );
 
-// Upload ots
-const otsFileUrl = await uploadToS3(
-  { path: otsFilePath, originalname: `Timestamp-${displayedID}.ots` },
-  "ots"
-);
+  const otsFileUrl = await uploadToS3(
+    { path: otsFilePath, originalname: `Timestamp-${displayedID}.ots` },
+    "ots"
+  );
 
-const s3Links = {
-  fileUrl: originalFileUrl,
-  certUrl: certFileUrl,
-  otsUrl: otsFileUrl,
-};
+  const s3Links = {
+    fileUrl: originalFileUrl,
+    certUrl: certFileUrl,
+    otsUrl: otsFileUrl
+  };
 
-  const workCertificateData = await saveToDatabase({
+  /* SAVE DB */
+  const workData = await saveToDatabase({
     id_client: user._id,
-    id_category: 1,
-    workCounter,
     displayed_ID: displayedID,
-    status: true,
     title: workTitle,
     copyright_owner: copyrightOwner,
     additional_copyright_owners: additionalOwners || "",
@@ -159,48 +146,32 @@ const s3Links = {
     file_name: file.originalname,
     file_fingerprint: fingerprint,
     s3_links: s3Links,
-    TSA: {
-      otsFilePath,
-      blockInfo: "Pending (can be updated after verification)",
-    },
-    otsFileUrl: s3Links.otsUrl, // Pass OTS file URL
+    otsFileUrl
   });
 
-  // ✅ Generate Signed URLs
+  /* ✅ DEDUCT TOKEN AFTER SUCCESS */
+  await deductTokens(user._id, 1, workData._id);
+
+  /* SIGNED URL */
   const certificateUrl = await generateSignedUrl(s3Links.certUrl);
-  const signedOriginalFileUrl = await generateSignedUrl(s3Links.fileUrl);
+  const signedFileUrl = await generateSignedUrl(s3Links.fileUrl);
   const otsUrl = await generateSignedUrl(s3Links.otsUrl);
-
-  // await sendConfirmationEmail(user.email, workTitle);
-
-  // res.status(201).json({
-  //   message: "Work uploaded and registered",
-  //   fingerprint,
-  //   workCounter,
-  //   displayedID,
-  //   certificatePath,
-  //   tsaData: {
-  //     otsFilePath,
-  //     blockInfo: "Pending (can be updated after verification)"
-  //   },
-  //   s3Links,
-  //   workCertificateData
-  // });
 
   res.status(201).json({
     status: "success",
     message: "Work uploaded and registered successfully.",
     data: {
-      id: workCertificateData._id,
+      id: workData._id,
       displayed_id: displayedID,
       title: workTitle,
-      registration_date: formatDateForCertificate(workCertificateData.registeration_date),
+      registration_date: formatDateForCertificate(workData.registeration_date),
       fingerprint,
       certificate_url: certificateUrl,
-      ots_url: otsUrl,
-      original_file_url: signedOriginalFileUrl,
-    },
+      original_file_url: signedFileUrl,
+      ots_url: otsUrl
+    }
   });
+
 });
 
 // VERIFY WORK CONTROLLER

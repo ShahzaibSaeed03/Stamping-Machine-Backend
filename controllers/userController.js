@@ -7,45 +7,41 @@ import bcrypt from "bcryptjs";
 
 
 // USER REGISTERING CONTROLLER
-const registerUser = asyncHandler(async (req, res, next) => {
+export const registerUser = asyncHandler(async (req, res) => {
+  console.log("REGISTER HIT:", req.body);
+
   const { email } = req.body;
+
+  /* VALIDATION */
 
   if (!email) {
     res.status(400);
-    throw new Error("Please enter all required fields: email");
+    throw new Error("Email is required");
   }
-  // CHECKING USER EXISTENCE
-  const userExist = await User.findOne({ email: email });
-  if (userExist) {
+
+  /* CHECK EXISTING USER */
+
+  const existing = await User.findOne({ email });
+
+  if (existing) {
     res.status(400);
-    throw new Error("User already Exists.");
+    throw new Error("User already exists");
   }
 
-  // Generate sequential userSeq atomically
-  const counter = await Counter.findOneAndUpdate(
-    { _id: "userSeq" },
-    { $inc: { seq: 1 } },
-    { upsert: true, new: true }
-  );
+  /* CREATE USER */
 
-  // CREATING THE USER
   const user = await User.create({
     email,
     creation_date: new Date(),
-    userSeq: counter.seq,
   });
 
-  if (user) {
-    res.status(200).json({
-      id: user._id,
-      creation_date: user.creation_date,
-      email: user.email,
-      userSeq: user.userSeq,
-    });
-  } else {
-    res.status(400);
-    throw new Error("User not Created.");
-  }
+  /* RESPONSE */
+
+  res.status(201).json({
+    id: user._id,
+    email: user.email,
+    creation_date: user.creation_date,
+  });
 });
 
 // USER LOGIN CONTROLLER
@@ -253,4 +249,4 @@ export const verifyEmailChange = asyncHandler(async (req, res) => {
 });
 
 
-export { registerUser, loginUser, allUser };
+export {  loginUser, allUser };

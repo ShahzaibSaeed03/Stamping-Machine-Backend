@@ -1,6 +1,5 @@
 import dotenv from "dotenv";
 dotenv.config({ path: "./.env" });
-import subscriptionRoutes from "./routes/subscriptionRoutes.js";
 
 import express from "express";
 import colors from "colors";
@@ -18,12 +17,15 @@ import tokenRoutes from "./routes/tokenRoutes.js";
 import billingRoutes from "./routes/billingRoutes.js";
 import webhookRoutes from "./routes/webhookRoutes.js";
 import stripeRoutes from "./routes/stripeRoutes.js";
+import subscriptionRoutes from "./routes/subscriptionRoutes.js";
 
 import { notFound, errorHandler } from "./middlewares/errorMiddlewares.js";
 
 const app = express();
 const port = process.env.PORT || 5000;
 const __dirname = path.resolve();
+
+console.log("MONGO:", process.env.MONGO_URI);
 
 /* ensure upload folder */
 const uploadDir = path.join(process.cwd(), "work-uploads");
@@ -42,23 +44,39 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-/* CORS */
-const corsOptions = {
-  origin: [
-    "http://localhost:4200",
-    "http://localhost:4100",
-    "https://mycopyrightally.com",
-  ],
-  credentials: true,
-};
-app.use(cors(corsOptions));
+/* ================= CORS (ONLY ONE) ================= */
 
-/* Stripe raw */
+const allowedOrigins = [
+  "http://localhost:4200",
+  "http://localhost:4100",
+  "https://mycopyrightally.com",
+  "https://www.mycopyrightally.com",
+  "https://coral-app-9b72d189-1c28-4012-89ab-e15c0f593b39.ondigitalocean.app"
+];
+
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error("CORS not allowed: " + origin));
+    },
+    credentials: true,
+  })
+);
+
+/* Stripe raw body BEFORE json */
 app.use("/api/webhook/stripe", express.raw({ type: "application/json" }));
 
+/* json */
 app.use(express.json());
 
-/* Routes */
+/* ================= Routes ================= */
+
 app.use("/api/works", workRoutes);
 app.use("/api/shares", shareRoutes);
 app.use("/api/auth", authRoutes);
@@ -67,8 +85,8 @@ app.use("/api/tokens", tokenRoutes);
 app.use("/api/stripe", stripeRoutes);
 app.use("/api/billing", billingRoutes);
 app.use("/api/webhook", webhookRoutes);
-
 app.use("/api/subscription", subscriptionRoutes);
+
 /* errors */
 app.use(notFound);
 app.use(errorHandler);

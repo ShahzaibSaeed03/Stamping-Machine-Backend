@@ -6,126 +6,61 @@ import generateToken from "../utils/generateToken.js";
 
 export const registerUser = asyncHandler(async (req, res) => {
 
-const {
-  firstName,
-  lastName,
-  email,
-  password,
-  companyName,
-  ownerName,
-  country,
-  state,
-
-  addressLine1,
-  addressLine2,
-  zip,
-  city,
-  phone,
-  profession,
-  refSource,
-
-  billingCompany,
-  billingName,
-  vatNumber,
-  billingAddress1,
-  billingAddress2,
-  billingZip,
-  billingCity,
-  billingState,
-  billingCountry,
-  billingPhone,
-  billingSameAsPersonal
-
-} = req.body;
-
-/* VALIDATION */
-
-if (!firstName || !lastName || !email || !password) {
-  res.status(400);
-  throw new Error("Required fields missing");
-}
-
-if (!companyName && !ownerName) {
-  res.status(400);
-  throw new Error("Company or Owner required");
-}
-
-if (country === "USA" && !state) {
-  res.status(400);
-  throw new Error("State required for USA");
-}
-
-/* USER EXISTS */
-
-const exists = await User.findOne({ email });
-if (exists) {
-  res.status(400);
-  throw new Error("User already exists");
-}
-
-/* USER SEQUENCE */
-
-const counter = await Counter.findOneAndUpdate(
-  { _id: "userSeq" },
-  { $inc: { seq: 1 } },
-  { new: true, upsert: true }
-);
-
-/* HASH */
-
-const hashed = await bcrypt.hash(password, 10);
-
-/* CREATE USER */
-
-const user = await User.create({
-
-  firstName,
-  lastName,
-  email,
-  password: hashed,
-  companyName,
-  ownerName,
-  country,
-  state,
-  userSeq: counter.seq,
-
-  personalAddress: {
-    address1: addressLine1,
-    address2: addressLine2,
-    zip,
-    city,
-    state,
+  const {
+    firstName,
+    lastName,
+    email,
+    password,
+    companyName,
+    ownerName,
     country,
-    phone,
-    profession,
-    refSource
-  },
+    state
+  } = req.body;
 
-  billing: {
-    company: billingCompany,
-    name: billingName,
-    vatNumber,
-    address1: billingAddress1,
-    address2: billingAddress2,
-    zip: billingZip,
-    city: billingCity,
-    state: billingState,
-    country: billingCountry,
-    phone: billingPhone,
-    sameAsPersonal: billingSameAsPersonal
-  },
+  if (!firstName || !lastName || !email || !password) {
+    res.status(400);
+    throw new Error("Required fields missing");
+  }
 
-  subscriptionStatus: "inactive",
-  tokens: 0
-});
+  const exists = await User.findOne({ email });
+  if (exists) {
+    res.status(400);
+    throw new Error("User already exists");
+  }
 
-res.status(201).json({
-  id: user._id,
-  email: user.email,
-  userSeq: user.userSeq,
-  subscriptionStatus: user.subscriptionStatus
-});
+  const counter = await Counter.findOneAndUpdate(
+    { _id: "userSeq" },
+    { $inc: { seq: 1 } },
+    { new: true, upsert: true }
+  );
 
+  const hashed = await bcrypt.hash(password, 10);
+
+  const user = await User.create({
+    firstName,
+    lastName,
+    email,
+    password: hashed,
+    companyName,
+    ownerName,
+    country,
+    state,
+    userSeq: counter.seq,
+    subscriptionStatus: "inactive",
+    tokens: 0
+  });
+
+  // ⭐ token generate
+  const token = generateToken(user._id);
+
+  // ⭐ single response
+  res.status(201).json({
+    id: user._id,
+    email: user.email,
+    userSeq: user.userSeq,
+    subscriptionStatus: user.subscriptionStatus,
+    token
+  });
 });
 export const loginUser = asyncHandler(async (req, res) => {
 

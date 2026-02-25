@@ -70,7 +70,9 @@ const userSchema = mongoose.Schema(
   /* TOKENS */
 
   tokens: { type: Number, default: 0 },
+/* AUTH */
 
+tokenVersion: { type: Number, default: 0 },
   /* EMAIL CHANGE */
 
   emailChangeTemp: String,

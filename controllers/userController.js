@@ -12,14 +12,10 @@ export const registerUser = asyncHandler(async (req, res) => {
 
   const { email } = req.body;
 
-  /* VALIDATION */
-
   if (!email) {
     res.status(400);
     throw new Error("Email is required");
   }
-
-  /* CHECK EXISTING USER */
 
   const existing = await User.findOne({ email });
 
@@ -29,44 +25,65 @@ export const registerUser = asyncHandler(async (req, res) => {
   }
 
   /* CREATE USER */
+ const user = await User.create({
+  email,
+  creation_date: new Date(),
+});
 
-  const user = await User.create({
-    email,
-    creation_date: new Date(),
-  });
+/* increase version */
+user.tokenVersion += 1;
+await user.save();
+
+const token = generateToken(user);
+
+res.status(201).json({
+  id: user._id,
+  email: user.email,
+  userSeq: user.userSeq,
+  subscriptionStatus: user.subscriptionStatus,
+  token,   // ⭐ THIS IS MISSING NOW
+});
+
+
 
   /* RESPONSE */
-
   res.status(201).json({
     id: user._id,
     email: user.email,
     creation_date: user.creation_date,
+    token,   // ⭐ return token
   });
 });
 
 // USER LOGIN CONTROLLER
-const loginUser = asyncHandler(async (req, res, next) => {
+const loginUser = asyncHandler(async (req, res) => {
   const { email } = req.body;
 
   if (!email) {
     res.status(400);
     throw new Error("Please enter all the Fields");
   }
-  // GETTING THE USER
-  const user = await User.findOne({ email: email });
 
-  if (user) {
-    res.status(200).json({
-      id: user._id,
-      email: user.email,
-      name: user.name,
-      userSeq: user.userSeq,
-      token: generateToken(user._id)
-    });
-  } else {
+  const user = await User.findOne({ email });
+
+  if (!user) {
     res.status(401);
-    throw new Error("Invalid Email or Password Found");
+    throw new Error("Invalid Email");
   }
+
+  /* ⭐ increase token version (invalidate old tokens) */
+  user.tokenVersion += 1;
+  await user.save();
+
+  const token = generateToken(user);
+
+  res.status(200).json({
+    id: user._id,
+    email: user.email,
+    name: user.name,
+    userSeq: user.userSeq,
+    token
+  });
 });
 
 // SEARCH/GET ALL USER CONTROLLER (GET /api/user?search=)
@@ -102,55 +119,55 @@ export const getProfile = asyncHandler(async (req, res) => {
 });
 /* UPDATE PROFILE */
 
-export const updateProfile = asyncHandler(async (req,res)=>{
+export const updateProfile = asyncHandler(async (req, res) => {
 
-const user = await User.findById(req.user._id);
-if(!user) throw new Error("User not found");
+  const user = await User.findById(req.user._id);
+  if (!user) throw new Error("User not found");
 
-const {
-firstName,
-lastName,
-companyName,
-ownerName,
-country,
-state,
-personalAddress,
-billing
-}=req.body;
+  const {
+    firstName,
+    lastName,
+    companyName,
+    ownerName,
+    country,
+    state,
+    personalAddress,
+    billing
+  } = req.body;
 
-/* BASIC */
+  /* BASIC */
 
-user.firstName = firstName ?? user.firstName;
-user.lastName = lastName ?? user.lastName;
-user.companyName = companyName ?? user.companyName;
-user.ownerName = ownerName ?? user.ownerName;
-user.country = country ?? user.country;
-user.state = state ?? user.state;
+  user.firstName = firstName ?? user.firstName;
+  user.lastName = lastName ?? user.lastName;
+  user.companyName = companyName ?? user.companyName;
+  user.ownerName = ownerName ?? user.ownerName;
+  user.country = country ?? user.country;
+  user.state = state ?? user.state;
 
-/* PERSONAL ADDRESS */
+  /* PERSONAL ADDRESS */
 
-if(personalAddress){
-user.personalAddress = {
-...user.personalAddress.toObject(),
-...personalAddress
-};
-}
+  if (personalAddress) {
+    user.personalAddress = {
+      ...user.personalAddress.toObject(),
+      ...personalAddress
+    };
+  }
 
-/* BILLING */
+  /* BILLING */
 
-if(billing){
-user.billing = {
-...user.billing.toObject(),
-...billing
-};
-}
+  if (billing) {
+    user.billing = {
+      ...user.billing.toObject(),
+      ...billing
+    };
+  }
 
-await user.save();
+  await user.save();
 
-const safe=user.toObject();
-delete safe.password;
+  const safe = user.toObject();
+  delete safe.password;
 
-res.json(safe);
+  res.json(safe);
 });
 export const changePassword = asyncHandler(async (req, res) => {
 
@@ -249,4 +266,4 @@ export const verifyEmailChange = asyncHandler(async (req, res) => {
 });
 
 
-export {  loginUser, allUser };
+export { loginUser, allUser };

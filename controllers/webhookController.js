@@ -46,7 +46,7 @@ export const stripeWebhook = async (req, res) => {
 
       user.subscriptionStatus = "active";
       user.subscriptionStart = new Date();
-      user.subscriptionEnd = new Date(Date.now() + 365*24*60*60*1000);
+      user.subscriptionEnd = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
 
       user.stripeCustomerId = session.customer;
       user.stripeSubscriptionId = session.subscription;
@@ -68,6 +68,26 @@ export const stripeWebhook = async (req, res) => {
       );
     }
   }
+  if (event.type === "invoice.payment_succeeded") {
 
+    const invoice = event.data.object;
+
+    const customerId = invoice.customer;
+
+    const user = await User.findOne({
+      stripeCustomerId: customerId
+    });
+
+    if (user) {
+
+      user.subscriptionStatus = "active";
+      user.subscriptionStart = new Date(invoice.period_start * 1000);
+      user.subscriptionEnd = new Date(invoice.period_end * 1000);
+
+      await user.save();
+
+      await addTokens(user._id, 5, "bonus", "Monthly subscription tokens");
+    }
+  }
   res.json({ received: true });
 };

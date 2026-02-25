@@ -4,6 +4,8 @@ import User from "../models/userModel.js";
 import Counter from "../models/counterModel.js";
 import generateToken from "../utils/generateToken.js";
 
+/* ================= REGISTER ================= */
+
 export const registerUser = asyncHandler(async (req, res) => {
 
   const {
@@ -28,6 +30,7 @@ export const registerUser = asyncHandler(async (req, res) => {
     throw new Error("User already exists");
   }
 
+  /* sequence */
   const counter = await Counter.findOneAndUpdate(
     { _id: "userSeq" },
     { $inc: { seq: 1 } },
@@ -50,18 +53,18 @@ export const registerUser = asyncHandler(async (req, res) => {
     tokens: 0
   });
 
-  // ⭐ token generate
-  const token = generateToken(user._id);
-
-  // ⭐ single response
   res.status(201).json({
     id: user._id,
     email: user.email,
     userSeq: user.userSeq,
     subscriptionStatus: user.subscriptionStatus,
-    token
+    tokens: user.tokens,
+    token: generateToken(user)
   });
 });
+
+/* ================= LOGIN ================= */
+
 export const loginUser = asyncHandler(async (req, res) => {
 
   const { email, password } = req.body;
@@ -91,6 +94,6 @@ export const loginUser = asyncHandler(async (req, res) => {
     userSeq: user.userSeq,
     subscriptionStatus: user.subscriptionStatus,
     tokens: user.tokens,
-    token: generateToken(user._id)
+    token: generateToken(user)
   });
 });

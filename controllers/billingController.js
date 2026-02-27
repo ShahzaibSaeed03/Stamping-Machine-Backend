@@ -157,6 +157,30 @@ export const getInvoices = asyncHandler(async (req, res) => {
   res.json(formatted);
 });
 
+
+export const setDefaultPaymentMethod = asyncHandler(async (req,res)=>{
+
+  const stripe=new Stripe(process.env.STRIPE_SECRET_KEY);
+  const user=await User.findById(req.user._id);
+
+  const { paymentMethodId }=req.body;
+
+  if(!user?.stripeCustomerId) throw new Error("No customer");
+
+  /* attach */
+  await stripe.paymentMethods.attach(paymentMethodId,{
+    customer:user.stripeCustomerId
+  });
+
+  /* set default */
+  await stripe.customers.update(user.stripeCustomerId,{
+    invoice_settings:{
+      default_payment_method:paymentMethodId
+    }
+  });
+
+  res.json({success:true});
+});
 export const getCurrentCard = asyncHandler(async (req, res) => {
 
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -192,3 +216,4 @@ export const createSetupIntent = asyncHandler(async (req, res) => {
 
   res.json({ clientSecret: intent.client_secret });
 });
+

@@ -1,6 +1,6 @@
 import express from "express";
 import { userAuthMiddleware } from "../middlewares/authMiddleware.js";
-import { getSubscriptionInfo, cancelSubscription, createCheckoutSession, getInvoices, resumeSubscription, getCurrentCard, createSetupIntent } from "../controllers/billingController.js";
+import { getSubscriptionInfo, cancelSubscription, createCheckoutSession, getInvoices, resumeSubscription, getCurrentCard, createSetupIntent,setDefaultPaymentMethod } from "../controllers/billingController.js";
 
 const router = express.Router();
 
@@ -11,5 +11,6 @@ router.get("/invoices", userAuthMiddleware, getInvoices);
 router.post("/resume", userAuthMiddleware, resumeSubscription);
 router.get("/card", userAuthMiddleware, getCurrentCard);
 router.post("/card/setup-intent", userAuthMiddleware, createSetupIntent);
+router.post("/set-default-card", userAuthMiddleware, setDefaultPaymentMethod);
 
 export default router;

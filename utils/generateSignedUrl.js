@@ -2,37 +2,25 @@ import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { s3Client } from "../config/s3Client.js";
 
-// const generateSignedUrl = async (key) => {
-//   const command = new GetObjectCommand({
-//     Bucket: process.env.AWS_BUCKET_NAME,
-//     Key: key,
-//   });
+const generateSignedUrl = async (keyOrUrl, disposition = "inline", contentType = "application/pdf") => {
 
-//   const url = await getSignedUrl(s3Client, command, { expiresIn: 60 * 5 }); // 5 minutes
-//   return url;
-// };
-
-
-const generateSignedUrl = async (keyOrUrl) => {
-  if (!keyOrUrl || typeof keyOrUrl !== "string") {
-    throw new Error("Invalid key: must be a non-empty string");
-  }
-
-  // If it's a full URL, extract the key
   let key = keyOrUrl;
+
   if (key.startsWith("https://")) {
     const url = new URL(keyOrUrl);
-    key = decodeURIComponent(url.pathname.slice(1)); // remove leading slash
+    key = decodeURIComponent(url.pathname.slice(1));
   }
 
   const command = new GetObjectCommand({
-    Bucket: process.env.DO_SPACE_NAME
-,
+    Bucket: process.env.DO_SPACE_NAME,
     Key: key,
+
+    // ⭐ THIS decides view vs download
+    ResponseContentDisposition: disposition,
+    ResponseContentType: contentType
   });
 
   return await getSignedUrl(s3Client, command, { expiresIn: 60 * 5 });
 };
-
 
 export { generateSignedUrl };

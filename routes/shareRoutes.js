@@ -19,6 +19,5 @@ router.post("/set-password",userAuthMiddleware,setSharePassword);
 
 router.post("/access-by-reference", accessByReference);
 // Public share access route - no auth required, but POST to handle password in body
-router.post("/access/:shareId", getSharedWork);
-
+router.post("/:shareId", getSharedWork);
 export default router; 

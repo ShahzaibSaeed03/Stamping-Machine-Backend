@@ -1,5 +1,6 @@
 import asyncHandler from "express-async-handler";
 import Work from "../models/workModel.js";
+import SharedWork from "../models/sharedWorkModel.js";
 import {
   computeSHA256,
   generateDisplayedID,
@@ -280,14 +281,31 @@ const getWorksByUser = asyncHandler(async (req, res) => {
 
   const works = await Work.find({ id_client: userId, status: true })
     .populate("id_client", "email")
-    .populate("id_certificate")   // IMPORTANT → we need id_file from certificate
+    .populate("id_certificate")
     .sort({ registeration_date: -1 });
+
+  /* ⭐ FETCH ALL SHARES (FAST WAY) */
+  const workIds = works.map(w => w._id);
+
+  const shares = await SharedWork.find({
+    id_work: { $in: workIds }
+  });
+
+  const shareMap = new Map(
+    shares.map(s => [s.id_work.toString(), s])
+  );
 
   const data = await Promise.all(
     works.map(async (work) => {
 
+      const share = shareMap.get(work._id.toString());
+
       const downloadUrl = work.id_file
         ? await generateSignedUrl(work.id_file)
+        : null;
+
+      const certificateViewUrl = work.id_certificate?.id_file
+        ? await generateSignedUrl(work.id_certificate.id_file, "inline", "application/pdf")
         : null;
 
       const certificateUrl = work.id_certificate?.id_file
@@ -308,7 +326,12 @@ const getWorksByUser = asyncHandler(async (req, res) => {
 
         downloadUrl,
         certificateUrl,
+        certificateViewUrl,
         otsUrl,
+
+        /* ⭐ PASSWORD FLAG */
+        passwordProtected: !!share?.password_hash,
+        shareId: share?.sha256_string || null,
 
         client: {
           _id: work.id_client._id,

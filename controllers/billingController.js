@@ -91,7 +91,7 @@ export const createCheckoutSession = asyncHandler(async (req, res) => {
         quantity: 1
       }
     ],
-
+    automatic_tax: { enabled: true },
     metadata: {
       userId: user._id.toString()
     },
@@ -158,28 +158,28 @@ export const getInvoices = asyncHandler(async (req, res) => {
 });
 
 
-export const setDefaultPaymentMethod = asyncHandler(async (req,res)=>{
+export const setDefaultPaymentMethod = asyncHandler(async (req, res) => {
 
-  const stripe=new Stripe(process.env.STRIPE_SECRET_KEY);
-  const user=await User.findById(req.user._id);
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+  const user = await User.findById(req.user._id);
 
-  const { paymentMethodId }=req.body;
+  const { paymentMethodId } = req.body;
 
-  if(!user?.stripeCustomerId) throw new Error("No customer");
+  if (!user?.stripeCustomerId) throw new Error("No customer");
 
   /* attach */
-  await stripe.paymentMethods.attach(paymentMethodId,{
-    customer:user.stripeCustomerId
+  await stripe.paymentMethods.attach(paymentMethodId, {
+    customer: user.stripeCustomerId
   });
 
   /* set default */
-  await stripe.customers.update(user.stripeCustomerId,{
-    invoice_settings:{
-      default_payment_method:paymentMethodId
+  await stripe.customers.update(user.stripeCustomerId, {
+    invoice_settings: {
+      default_payment_method: paymentMethodId
     }
   });
 
-  res.json({success:true});
+  res.json({ success: true });
 });
 export const getCurrentCard = asyncHandler(async (req, res) => {
 

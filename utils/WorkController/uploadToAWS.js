@@ -5,6 +5,7 @@ import path from "path";
 import mime from "mime-types";
 
 export const uploadToS3 = async (file, folder) => {
+
   const fileStream = fs.createReadStream(file.path);
 
   const originalBase = path.basename(
@@ -15,17 +16,36 @@ export const uploadToS3 = async (file, folder) => {
   const safeBase = originalBase.replace(/[^a-zA-Z0-9-_]/g, "_");
 
   let extension = "";
+  let contentType = "application/octet-stream";
+  let contentDisposition = "attachment";
 
   switch (folder) {
+
+    // 🔹 CERTIFICATE (OPEN IN BROWSER)
     case "certificates":
       extension = ".pdf";
+      contentType = "application/pdf";   // must be PDF
+      contentDisposition = "inline";     // allow browser preview
       break;
+
+    // 🔹 OTS (FORCE DOWNLOAD)
     case "ots":
       extension = ".ots";
+      contentType = "application/octet-stream";
+      contentDisposition = "attachment";
       break;
+
+    // 🔹 ORIGINAL FILE (FORCE DOWNLOAD)
     case "files":
       extension = path.extname(file.originalname);
+      contentType = mime.lookup(extension) || "application/octet-stream";
+      contentDisposition = "attachment";
       break;
+
+    default:
+      extension = path.extname(file.originalname);
+      contentType = mime.lookup(extension) || "application/octet-stream";
+      contentDisposition = "attachment";
   }
 
   const key = `${folder}/${Date.now()}-${safeBase}${extension}`;
@@ -34,8 +54,8 @@ export const uploadToS3 = async (file, folder) => {
     Bucket: process.env.DO_SPACE_NAME,
     Key: key,
     Body: fileStream,
-    ContentType: mime.lookup(extension) || "application/octet-stream",
-    ContentDisposition: "attachment" // ⭐ VERY IMPORTANT
+    ContentType: contentType,
+    ContentDisposition: contentDisposition
   };
 
   try {

@@ -7,16 +7,15 @@ import mime from "mime-types";
 export const uploadToS3 = async (file, folder) => {
   const fileStream = fs.createReadStream(file.path);
 
-  // derive name from original
   const originalBase = path.basename(
     file.originalname,
     path.extname(file.originalname)
   );
 
-  // sanitize filename
   const safeBase = originalBase.replace(/[^a-zA-Z0-9-_]/g, "_");
 
   let extension = "";
+
   switch (folder) {
     case "certificates":
       extension = ".pdf";
@@ -35,7 +34,8 @@ export const uploadToS3 = async (file, folder) => {
     Bucket: process.env.DO_SPACE_NAME,
     Key: key,
     Body: fileStream,
-    ContentType: mime.lookup(file.originalname) || "application/octet-stream", // ⭐ critical
+    ContentType: mime.lookup(extension) || "application/octet-stream",
+    ContentDisposition: "attachment" // ⭐ VERY IMPORTANT
   };
 
   try {

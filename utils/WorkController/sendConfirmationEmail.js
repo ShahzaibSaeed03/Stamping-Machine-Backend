@@ -52,7 +52,7 @@ export const sendConfirmationEmail = async (email, workTitle) => {
             </p>
 
             <div style="text-align:center; margin:25px 0;">
-              <a href="https://mycopyrightally.com/my-original-works"
+              <a href="https://instagrace.com/my-original-works"
                  style="background:#2563eb; color:#ffffff; padding:12px 20px; text-decoration:none; border-radius:5px; font-size:15px; display:inline-block;">
                 View My Original Works
               </a>
@@ -98,7 +98,7 @@ export const sendConfirmationEmail = async (email, workTitle) => {
       from: `"MyCopyrightAlly" <${process.env.EMAIL_FROM}>`,
       to: email,
       subject: "Your work has been successfully protected",
-      text: `Your work "${workTitle}" has been successfully protected. Visit https://mycopyrightally.com/my-original-works to access your certificate and file.`,
+      text: `Your work "${workTitle}" has been successfully protected. Visit https://instagrace.com/my-original-works to access your certificate and file.`,
       html: htmlBody,
     };
 

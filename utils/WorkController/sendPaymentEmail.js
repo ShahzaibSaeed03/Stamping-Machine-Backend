@@ -36,7 +36,7 @@ export const sendPaymentEmail = async ({
 
       <p>You can manage your subscription anytime at:</p>
 
-      <a href="https://mycopyrightally.com/billing"
+      <a href="https://instagrace.com/billing"
          style="background:#2563eb;color:#fff;padding:10px 15px;text-decoration:none;border-radius:5px;">
          Go to Billing
       </a>

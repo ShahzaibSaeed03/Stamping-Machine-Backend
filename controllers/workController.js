@@ -162,8 +162,15 @@ const uploadWork = asyncHandler(async (req, res) => {
   });
 
   /* ✅ DEDUCT TOKEN AFTER SUCCESS */
+  /* ✅ DEDUCT TOKEN AFTER SUCCESS */
   await deductTokens(user._id, 1, workData._id);
 
+  /* ✅ SEND CONFIRMATION EMAIL */
+  try {
+    await sendConfirmationEmail(user.email, workTitle);
+  } catch (err) {
+    console.error("Email failed:", err.message);
+  }
   /* SIGNED URL */
   const certificateUrl = await generateSignedUrl(s3Links.certUrl);
   const signedFileUrl = await generateSignedUrl(s3Links.fileUrl);

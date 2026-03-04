@@ -77,28 +77,28 @@ export const createCheckoutSession = asyncHandler(async (req, res) => {
 
   /* ================= CREATE EMBEDDED CHECKOUT SESSION ================= */
 
-  const session = await stripe.checkout.sessions.create({
+const session = await stripe.checkout.sessions.create({
+  mode: "subscription",
+  ui_mode: "embedded",
 
-    mode: "subscription",
+  customer: customerId,
 
-    ui_mode: "embedded",                 // ⭐ REQUIRED FOR EMBEDDED
+  billing_address_collection: "required",
+  customer_update: { address: "auto" },
 
-    customer: customerId,
+  line_items: [
+    {
+      price: process.env.STRIPE_PRICE_ID,
+      quantity: 1
+    }
+  ],
 
-    line_items: [
-      {
-        price: process.env.STRIPE_PRICE_ID,
-        quantity: 1
-      }
-    ],
-    automatic_tax: { enabled: true },
-    metadata: {
-      userId: user._id.toString()
-    },
+  metadata: {
+    userId: user._id.toString()
+  },
 
-    return_url: `${process.env.CLIENT_URL}/billing/success?session_id={CHECKOUT_SESSION_ID}`
-
-  });
+  return_url: `${process.env.CLIENT_URL}/billing/success?session_id={CHECKOUT_SESSION_ID}`
+});
 
   /* ================= RETURN CLIENT SECRET ================= */
 

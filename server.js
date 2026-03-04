@@ -51,6 +51,8 @@ const allowedOrigins = [
   "http://localhost:4100",
   "https://mycopyrightally.com",
   "https://www.mycopyrightally.com",
+  'https://www.instagrace.com',
+  'https://instagrace.com',
   "https://coral-app-9b72d189-1c28-4012-89ab-e15c0f593b39.ondigitalocean.app"
 ];
 

@@ -1,90 +1,13 @@
-import express from "express";
 import asyncHandler from "express-async-handler";
 import User from "../models/userModel.js";
-import generateToken from "../utils/generateToken.js";
-import Counter from "../models/counterModel.js";
+
 import bcrypt from "bcryptjs";
+import { sendEmail } from "../utils/mailer.js";
 
 
 // USER REGISTERING CONTROLLER
-export const registerUser = asyncHandler(async (req, res) => {
-  console.log("REGISTER HIT:", req.body);
-
-  const { email } = req.body;
-
-  if (!email) {
-    res.status(400);
-    throw new Error("Email is required");
-  }
-
-  const existing = await User.findOne({ email });
-
-  if (existing) {
-    res.status(400);
-    throw new Error("User already exists");
-  }
-
-  /* CREATE USER */
- const user = await User.create({
-  email,
-  creation_date: new Date(),
-});
-
-/* increase version */
-user.tokenVersion += 1;
-await user.save();
-
-const token = generateToken(user);
-
-res.status(201).json({
-  id: user._id,
-  email: user.email,
-  userSeq: user.userSeq,
-  subscriptionStatus: user.subscriptionStatus,
-  token,   // ⭐ THIS IS MISSING NOW
-});
 
 
-
-  /* RESPONSE */
-  res.status(201).json({
-    id: user._id,
-    email: user.email,
-    creation_date: user.creation_date,
-    token,   // ⭐ return token
-  });
-});
-
-// USER LOGIN CONTROLLER
-const loginUser = asyncHandler(async (req, res) => {
-  const { email } = req.body;
-
-  if (!email) {
-    res.status(400);
-    throw new Error("Please enter all the Fields");
-  }
-
-  const user = await User.findOne({ email });
-
-  if (!user) {
-    res.status(401);
-    throw new Error("Invalid Email");
-  }
-
-  /* ⭐ increase token version (invalidate old tokens) */
-  user.tokenVersion += 1;
-  await user.save();
-
-  const token = generateToken(user);
-
-  res.status(200).json({
-    id: user._id,
-    email: user.email,
-    name: user.name,
-    userSeq: user.userSeq,
-    token
-  });
-});
 
 // SEARCH/GET ALL USER CONTROLLER (GET /api/user?search=)
 const allUser = asyncHandler(async (req, res, next) => {
@@ -115,8 +38,35 @@ export const getProfile = asyncHandler(async (req, res) => {
     throw new Error("User not found");
   }
 
-  res.status(200).json(user);
-});
+const safe = user.toObject();
+
+safe.personalAddress = safe.personalAddress || {
+  address1: "",
+  address2: "",
+  zip: "",
+  city: "",
+  state: "",
+  country: "",
+  phone: "",
+  profession: "",
+  refSource: ""
+};
+
+safe.billing = safe.billing || {
+  company: "",
+  name: "",
+  vatNumber: "",
+  address1: "",
+  address2: "",
+  zip: "",
+  city: "",
+  state: "",
+  country: "",
+  phone: "",
+  sameAsPersonal: false
+};
+
+res.status(200).json(safe);});
 /* UPDATE PROFILE */
 
 export const updateProfile = asyncHandler(async (req, res) => {
@@ -146,21 +96,24 @@ export const updateProfile = asyncHandler(async (req, res) => {
 
   /* PERSONAL ADDRESS */
 
-  if (personalAddress) {
-    user.personalAddress = {
-      ...user.personalAddress.toObject(),
-      ...personalAddress
-    };
-  }
+ if (personalAddress) {
 
+  user.personalAddress = {
+    ...(user.personalAddress || {}),
+    ...personalAddress
+  };
+
+}
   /* BILLING */
 
-  if (billing) {
-    user.billing = {
-      ...user.billing.toObject(),
-      ...billing
-    };
-  }
+ if (billing) {
+
+  user.billing = {
+    ...(user.billing || {}),
+    ...billing
+  };
+
+}
 
   await user.save();
 
@@ -209,32 +162,99 @@ export const changePassword = asyncHandler(async (req, res) => {
 
 export const requestEmailChange = asyncHandler(async (req, res) => {
 
-  const { newEmail } = req.body;
+  let { newEmail } = req.body;
 
   if (!newEmail) {
     res.status(400);
-    throw new Error("New email required");
+    throw new Error("New email is required");
   }
 
-  const exists = await User.findOne({ email: newEmail });
-  if (exists) {
-    res.status(400);
-    throw new Error("Email already in use");
-  }
+  /* NORMALIZE EMAIL */
 
-  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  newEmail = newEmail.trim().toLowerCase();
 
   const user = await User.findById(req.user._id);
 
+  if (!user) {
+    res.status(404);
+    throw new Error("User not found");
+  }
+
+  /* PREVENT SAME EMAIL */
+
+  if (user.email.toLowerCase() === newEmail) {
+    res.status(400);
+    throw new Error("New email cannot be the same as current email");
+  }
+
+  /* CHECK IF EMAIL ALREADY USED BY ANOTHER USER */
+
+  const emailExists = await User.findOne({
+    email: newEmail,
+    _id: { $ne: user._id }
+  });
+
+  if (emailExists) {
+    res.status(400);
+    throw new Error("Email already registered with another account");
+  }
+
+  /* GENERATE CODE */
+
+  const verificationCode = Math.floor(
+    100000 + Math.random() * 900000
+  ).toString();
+
+  /* SAVE TEMP EMAIL */
+
   user.emailChangeTemp = newEmail;
-  user.emailChangeCode = code;
+  user.emailChangeCode = verificationCode;
   user.emailChangeExpires = new Date(Date.now() + 10 * 60 * 1000);
 
   await user.save();
 
+  console.log("Email change requested by:", user.email);
+  console.log("New email:", newEmail);
+  console.log("Verification code:", verificationCode);
+
+  /* EMAIL TEMPLATE */
+
+  const verificationTemplate = `
+  <div style="font-family:Arial,sans-serif">
+    <h2>Email Verification</h2>
+    <p>You requested to change your account email.</p>
+    <p>Your verification code is:</p>
+    <h1 style="letter-spacing:3px">${verificationCode}</h1>
+    <p>This code will expire in 10 minutes.</p>
+  </div>
+  `;
+
+  const securityAlertTemplate = `
+  <div style="font-family:Arial,sans-serif">
+    <h2>Security Alert</h2>
+    <p>An email change was requested for your account.</p>
+    <p><strong>Requested new email:</strong> ${newEmail}</p>
+    <p>If this was not you please contact support immediately.</p>
+  </div>
+  `;
+
+  /* SEND EMAILS */
+
+  await Promise.all([
+    sendEmail({
+      to: newEmail,
+      subject: "Verify your new email address",
+      html: verificationTemplate
+    }),
+    sendEmail({
+      to: user.email,
+      subject: "Security Alert – Email Change Request",
+      html: securityAlertTemplate
+    })
+  ]);
+
   res.status(200).json({
-    message: "Verification code generated",
-    code // remove later when email service added
+    message: "Verification code sent to the new email"
   });
 
 });
@@ -243,27 +263,45 @@ export const verifyEmailChange = asyncHandler(async (req, res) => {
 
   const { code } = req.body;
 
+  if (!code) {
+    res.status(400);
+    throw new Error("Verification code required");
+  }
+
   const user = await User.findById(req.user._id);
 
-  if (!user || user.emailChangeCode !== code) {
+  if (!user) {
+    res.status(404);
+    throw new Error("User not found");
+  }
+
+  if (user.emailChangeCode !== code) {
     res.status(400);
-    throw new Error("Invalid code");
+    throw new Error("Invalid verification code");
   }
 
   if (user.emailChangeExpires < new Date()) {
     res.status(400);
-    throw new Error("Code expired");
+    throw new Error("Verification code expired");
   }
 
+  /* UPDATE EMAIL */
+
   user.email = user.emailChangeTemp;
+
   user.emailChangeTemp = null;
   user.emailChangeCode = null;
   user.emailChangeExpires = null;
 
   await user.save();
 
-  res.status(200).json({ message: "Email updated successfully" });
+  console.log("Email updated successfully for user:", user._id);
+
+  res.status(200).json({
+    message: "Email updated successfully"
+  });
+
 });
 
 
-export { loginUser, allUser };
+export {  allUser };

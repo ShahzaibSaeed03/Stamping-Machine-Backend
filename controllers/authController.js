@@ -25,32 +25,33 @@ export const registerUser = asyncHandler(async (req, res) => {
   }
 
   const exists = await User.findOne({ email });
+
   if (exists) {
     res.status(400);
     throw new Error("User already exists");
   }
 
-  /* sequence */
+  /* Generate sequential user id */
+
   const counter = await Counter.findOneAndUpdate(
     { _id: "userSeq" },
     { $inc: { seq: 1 } },
     { new: true, upsert: true }
   );
 
-  const hashed = await bcrypt.hash(password, 10);
+  const hashedPassword = await bcrypt.hash(password, 10);
 
   const user = await User.create({
     firstName,
     lastName,
     email,
-    password: hashed,
+    password: hashedPassword,
     companyName,
     ownerName,
     country,
     state,
     userSeq: counter.seq,
-    subscriptionStatus: "inactive",
-    tokens: 0
+    subscriptionStatus: "inactive", tokens: 0
   });
 
   res.status(201).json({
@@ -61,7 +62,9 @@ export const registerUser = asyncHandler(async (req, res) => {
     tokens: user.tokens,
     token: generateToken(user)
   });
+
 });
+
 
 /* ================= LOGIN ================= */
 
@@ -96,4 +99,5 @@ export const loginUser = asyncHandler(async (req, res) => {
     tokens: user.tokens,
     token: generateToken(user)
   });
+
 });

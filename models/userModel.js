@@ -2,9 +2,7 @@ import mongoose from "mongoose";
 
 const userSchema = mongoose.Schema(
 {
-  userSeq: { type: Number, unique: true },
-
-  /* BASIC */
+  userSeq: { type: Number, unique: true, index: true },
 
   firstName: { type: String, required: true },
   lastName: { type: String, required: true },
@@ -18,8 +16,6 @@ const userSchema = mongoose.Schema(
   country: String,
   state: String,
 
-  /* PERSONAL DETAILS */
-
   personalAddress: {
     address1: String,
     address2: String,
@@ -31,8 +27,6 @@ const userSchema = mongoose.Schema(
     profession: String,
     refSource: String
   },
-
-  /* BILLING */
 
   billing: {
     company: String,
@@ -48,11 +42,20 @@ const userSchema = mongoose.Schema(
     sameAsPersonal: Boolean
   },
 
-  /* SUBSCRIPTION */
-
   subscriptionStatus: {
     type: String,
-    enum: ["inactive", "active", "expired", "canceled"],
+    enum: [
+      "inactive", 
+      "active", 
+      "expired", 
+      "canceled",
+      "incomplete",
+      "incomplete_expired",
+      "past_due",
+      "trialing",
+      "unpaid",
+      "paused"
+    ],
     default: "inactive"
   },
 
@@ -61,23 +64,20 @@ const userSchema = mongoose.Schema(
 
   autoRenew: {
     type: Boolean,
-    default: true
+    default: false
   },
 
-  stripeCustomerId: String,
-  stripeSubscriptionId: String,
-
-  /* TOKENS */
+  stripeCustomerId: { type: String, index: true },
+  stripeSubscriptionId: { type: String, index: true },
 
   tokens: { type: Number, default: 0 },
-/* AUTH */
 
-tokenVersion: { type: Number, default: 0 },
-  /* EMAIL CHANGE */
+  tokenVersion: { type: Number, default: 0 },
 
   emailChangeTemp: String,
   emailChangeCode: String,
   emailChangeExpires: Date
+
 },
 { timestamps: true }
 );

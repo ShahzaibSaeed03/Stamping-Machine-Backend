@@ -2,50 +2,74 @@ import asyncHandler from "express-async-handler";
 import Stripe from "stripe";
 import User from "../models/userModel.js";
 
-export const createTokenCheckout = asyncHandler(async (req, res) => {
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-  const { qty } = req.params;
+export const createTokenCheckout = asyncHandler(async (req, res) => {
 
   const user = await User.findById(req.user._id);
   if (!user) throw new Error("User not found");
 
-  /* REQUIRE SUBSCRIPTION */
+  const qty = Number(req.params.qty);
 
-  if (
-    user.subscriptionStatus !== "active" ||
-    !user.subscriptionEnd ||
-    new Date(user.subscriptionEnd).getTime() <= Date.now()
-  ) {
-    res.status(403);
-    throw new Error("Active subscription required to buy tokens");
+  if (!qty || qty < 5) {
+    return res.status(400).json({ message: "Minimum purchase is 5 tokens" });
   }
 
-  const session = await stripe.checkout.sessions.create({
+  let customerId = user.stripeCustomerId;
 
-    mode: "payment",
+  if (!customerId) {
+    const customer = await stripe.customers.create({
+      email: user.email,
+      name: `${user.firstName || ""} ${user.lastName || ""}`.trim()
+    });
 
-    ui_mode: "embedded",   // ⭐ REQUIRED
+    customerId = customer.id;
+    user.stripeCustomerId = customerId;
+    await user.save();
+  }
 
-    line_items: [
-      {
-        price: process.env.TOKEN_PRICE_ID,
-        quantity: Number(qty)
-      }
-    ],
+const session = await stripe.checkout.sessions.create({
+  mode: "payment",
+  ui_mode: "embedded",
 
-    customer_email: user.email,
+  customer: customerId,
 
-    metadata: {
-      userId: user._id.toString(),
-      tokens: qty
-    },
 
-    return_url: `${process.env.CLIENT_URL}/billing/success?session_id={CHECKOUT_SESSION_ID}`
-  });
+  billing_address_collection: "required",
 
+  automatic_tax: {
+    enabled: true
+  },
+
+  invoice_creation: {
+    enabled: true
+  },
+
+  saved_payment_method_options: {
+    payment_method_save: "enabled"
+  },
+
+  payment_method_options: {
+    card: {
+      request_three_d_secure: "automatic"
+    }
+  },
+
+  line_items: [
+    {
+      price: process.env.TOKEN_PRICE_ID,
+      quantity: qty
+    }
+  ],
+
+  metadata: {
+    userId: user._id.toString(),
+    tokens: qty
+  },
+
+  return_url: `${process.env.CLIENT_URL}/billing/success?session_id={CHECKOUT_SESSION_ID}`
+});
   res.json({
-    clientSecret: session.client_secret   // ⭐ IMPORTANT
+    clientSecret: session.client_secret
   });
-
 });

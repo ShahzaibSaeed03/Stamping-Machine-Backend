@@ -8,6 +8,7 @@ import fs from "fs";
 import path from "path";
 
 import connectDB from "./config/conn.js";
+import contactRoutes from "./routes/contactRoutes.js";
 
 import userRoutes from "./routes/userRoutes.js";
 import workRoutes from "./routes/workRoutes.js";
@@ -89,6 +90,7 @@ app.use("/api/billing", billingRoutes);
 app.use("/api/webhook", webhookRoutes);
 app.use("/api/subscription", subscriptionRoutes);
 
+app.use("/api", contactRoutes);
 /* errors */
 app.use(notFound);
 app.use(errorHandler);

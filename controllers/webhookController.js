@@ -67,6 +67,7 @@ export const stripeWebhook = async (req, res) => {
       /* TOKEN PURCHASE */
       if (session.mode === "payment" && session.metadata?.tokens) {
         const tokens = Number(session.metadata.tokens);
+
         await addTokens(
           user._id,
           tokens,
@@ -80,20 +81,7 @@ export const stripeWebhook = async (req, res) => {
           currency: session.currency,
           type: `${tokens} Tokens`
         });
-        if (
-          invoice.billing_reason === "subscription_create" ||
-          invoice.billing_reason === "subscription_cycle"
-        ) {
 
-          await sendSalesEmail({
-            userEmail: user.email,
-            name: `${user.firstName} ${user.lastName}`,
-            amount: invoice.amount_paid / 100,
-            currency: invoice.currency,
-            type: "Subscription"
-          });
-
-        }
         console.log("Token purchase completed");
       }
     }
@@ -167,7 +155,21 @@ export const stripeWebhook = async (req, res) => {
         console.log("❌ No user found for invoice - customer:", invoice.customer);
         return res.json({ received: true });
       }
+      /* ADD SUBSCRIPTION BONUS TOKENS */
+      if (
+        invoice.billing_reason === "subscription_create" ||
+        invoice.billing_reason === "subscription_cycle"
+      ) {
 
+        await addTokens(
+          user._id,
+          5,
+          "bonus",
+          "Monthly subscription bonus"
+        );
+
+        console.log("✅ Added 5 subscription bonus tokens");
+      }
       console.log("✅ Found user for invoice:", user.email);
       await sendSalesEmail({
         userEmail: user.email,
@@ -178,7 +180,7 @@ export const stripeWebhook = async (req, res) => {
       });
 
       // If user has subscription ID, fetch and update dates
-      if (user.stripeSubscriptionId) {
+      if (invoice.subscription) {
         console.log("📌 Fetching subscription to get dates:", user.stripeSubscriptionId);
 
         try {

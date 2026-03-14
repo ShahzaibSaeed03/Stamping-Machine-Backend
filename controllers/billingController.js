@@ -8,8 +8,9 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 /* ================= GET SUBSCRIPTION INFO ================= */
 export const getSubscriptionInfo = asyncHandler(async (req, res) => {
+
   const user = await User.findById(req.user._id).select(
-    "subscriptionStatus subscriptionStart subscriptionEnd autoRenew tokens stripeSubscriptionId"
+    "email subscriptionStatus subscriptionStart subscriptionEnd autoRenew tokens stripeSubscriptionId"
   );
 
   if (!user) throw new Error("User not found");
@@ -18,15 +19,17 @@ export const getSubscriptionInfo = asyncHandler(async (req, res) => {
   if (user.stripeSubscriptionId) {
     try {
       console.log("Syncing subscription with Stripe for user:", user.email);
-      const subscription = await stripe.subscriptions.retrieve(user.stripeSubscriptionId);
+
+      const subscription = await stripe.subscriptions.retrieve(
+        user.stripeSubscriptionId
+      );
 
       if (subscription.current_period_start && subscription.current_period_end) {
+
         const startDate = new Date(subscription.current_period_start * 1000);
         const endDate = new Date(subscription.current_period_end * 1000);
 
         if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
-          console.log("Updating from Stripe - Start:", startDate.toISOString());
-          console.log("Updating from Stripe - End:", endDate.toISOString());
 
           user.subscriptionStart = startDate;
           user.subscriptionEnd = endDate;
@@ -36,26 +39,31 @@ export const getSubscriptionInfo = asyncHandler(async (req, res) => {
           await user.save();
         }
       }
+
     } catch (error) {
       console.error("Error syncing with Stripe:", error.message);
     }
   }
 
   const now = new Date();
-  const isActive = user.subscriptionStatus === 'active' &&
+
+  const isActive =
+    user.subscriptionStatus === "active" &&
     user.subscriptionEnd &&
     user.subscriptionEnd > now;
 
   res.json({
-    subscriptionStatus: isActive ? 'active' : user.subscriptionStatus,
+    subscriptionStatus: isActive ? "active" : user.subscriptionStatus,
     subscriptionStart: user.subscriptionStart,
     nextBillingDate: user.subscriptionEnd,
     autoRenew: user.autoRenew,
     remainingTokens: user.tokens,
-    isActive: isActive,
-    daysRemaining: user.subscriptionEnd ?
-      Math.max(0, Math.ceil((user.subscriptionEnd - now) / (1000 * 60 * 60 * 24))) : 0
+    isActive,
+    daysRemaining: user.subscriptionEnd
+      ? Math.max(0, Math.ceil((user.subscriptionEnd - now) / (1000 * 60 * 60 * 24)))
+      : 0
   });
+
 });
 
 
@@ -97,6 +105,9 @@ export const createCheckoutSession = asyncHandler(async (req, res) => {
     ui_mode: "embedded",
 
     customer: customerId,
+    automatic_tax: {
+      enabled: true
+    },
 
     billing_address_collection: "required",
     customer_update: { address: "auto" },
@@ -107,6 +118,9 @@ export const createCheckoutSession = asyncHandler(async (req, res) => {
         quantity: 1
       }
     ],
+    saved_payment_method_options: {
+      payment_method_save: "enabled"
+    },
 
     metadata: {
       userId: user._id.toString()
@@ -289,7 +303,9 @@ export const createSetupIntent = asyncHandler(async (req, res) => {
   }
 
   const intent = await stripe.setupIntents.create({
-    customer: user.stripeCustomerId
+    customer: user.stripeCustomerId,
+    payment_method_types: ['card']
+
   });
 
   res.json({

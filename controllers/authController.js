@@ -16,7 +16,27 @@ export const registerUser = asyncHandler(async (req, res) => {
     companyName,
     ownerName,
     country,
-    state
+    state,
+
+    addressLine1,
+    addressLine2,
+    zip,
+    city,
+    phone,
+    profession,
+    refSource,
+
+    billingCompany,
+    billingName,
+    vatNumber,
+    billingAddress1,
+    billingAddress2,
+    billingZip,
+    billingCity,
+    billingState,
+    billingCountry,
+    billingPhone,
+    billingSameAsPersonal
   } = req.body;
 
   if (!firstName || !lastName || !email || !password) {
@@ -42,6 +62,7 @@ export const registerUser = asyncHandler(async (req, res) => {
   const hashedPassword = await bcrypt.hash(password, 10);
 
   const user = await User.create({
+
     firstName,
     lastName,
     email,
@@ -50,8 +71,38 @@ export const registerUser = asyncHandler(async (req, res) => {
     ownerName,
     country,
     state,
+
     userSeq: counter.seq,
-    subscriptionStatus: "inactive", tokens: 0
+
+    subscriptionStatus: "inactive",
+    tokens: 0,
+
+    personalAddress: {
+      address1: addressLine1 || "",
+      address2: addressLine2 || "",
+      zip: zip || "",
+      city: city || "",
+      state: state || "",
+      country: country || "",
+      phone: phone || "",
+      profession: profession || "",
+      refSource: refSource || ""
+    },
+
+    billing: {
+      company: billingCompany || "",
+      name: billingName || "",
+      vatNumber: vatNumber || "",
+      address1: billingAddress1 || "",
+      address2: billingAddress2 || "",
+      zip: billingZip || "",
+      city: billingCity || "",
+      state: billingState || "",
+      country: billingCountry || "",
+      phone: billingPhone || "",
+      sameAsPersonal: billingSameAsPersonal || false
+    }
+
   });
 
   res.status(201).json({

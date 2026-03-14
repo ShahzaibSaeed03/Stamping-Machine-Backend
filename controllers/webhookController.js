@@ -138,7 +138,12 @@ export const stripeWebhook = async (req, res) => {
     ======================================================== */
 
     if (event.type === "invoice.payment_succeeded") {
+
       const invoice = event.data.object;
+
+      if (!invoice.subscription) {
+        console.log("⚠️ invoice.subscription is undefined in invoice.payment_succeeded; will use user.stripeSubscriptionId from DB as fallback.");
+      }
 
       console.log("\n🔍 Processing invoice.payment_succeeded:", {
         id: invoice.id,
@@ -179,141 +184,48 @@ export const stripeWebhook = async (req, res) => {
         type: "Subscription"
       });
 
-      // If user has subscription ID, fetch and update dates
-      if (invoice.subscription) {
-        console.log("📌 Fetching subscription to get dates:", user.stripeSubscriptionId);
-
-        try {
-          const subscription = await stripe.subscriptions.retrieve(user.stripeSubscriptionId);
-
-          console.log("Full subscription data from Stripe:", {
-            id: subscription.id,
-            status: subscription.status,
-            current_period_start: subscription.current_period_start,
-            current_period_end: subscription.current_period_end,
-            start_date: subscription.start_date,
-            created: subscription.created,
-            trial_start: subscription.trial_start,
-            trial_end: subscription.trial_end
-          });
-
-          // Determine the start date (use first available)
-          let startTimestamp = null;
-          const possibleStartFields = [
-            subscription.current_period_start,
-            subscription.start_date,
-            subscription.created
-          ].filter(field => field !== null && field !== undefined);
-
-          if (possibleStartFields.length > 0) {
-            startTimestamp = possibleStartFields[0];
-          }
-
-          // Determine the end date
-          let endTimestamp = null;
-          const possibleEndFields = [
-            subscription.current_period_end,
-            subscription.trial_end
-          ].filter(field => field !== null && field !== undefined);
-
-          if (possibleEndFields.length > 0) {
-            endTimestamp = possibleEndFields[0];
-          }
-
-          console.log("Selected timestamps - Start:", startTimestamp, "End:", endTimestamp);
-
-          if (startTimestamp) {
-            const startDate = new Date(startTimestamp * 1000);
-
-            // Calculate end date (1 year from start)
-            let endDate;
-            if (endTimestamp) {
-              endDate = new Date(endTimestamp * 1000);
-            } else {
-              // If no end timestamp, calculate 1 year from start
-              endDate = new Date(startDate);
-              endDate.setFullYear(endDate.getFullYear() + 1);
-              console.log("⚠️ No end timestamp provided, calculating 1 year from start");
-            }
-
-            if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
-              console.log("📅 SETTING SUBSCRIPTION DATES FROM INVOICE:");
-              console.log("Start:", startDate.toISOString());
-              console.log("End:", endDate.toISOString());
-
-              // Calculate and verify duration
-              const diffInDays = Math.round((endDate - startDate) / (24 * 60 * 60 * 1000));
-              console.log(`📊 Subscription duration: ${diffInDays} days`);
-
-              // Ensure it's exactly 1 year (365 days, or 366 for leap year)
-              if (diffInDays < 360 || diffInDays > 370) {
-                console.log("⚠️ Duration doesn't look like 1 year, adjusting...");
-                // Force to 1 year from start
-                endDate.setFullYear(startDate.getFullYear() + 1);
-                const newDiffInDays = Math.round((endDate - startDate) / (24 * 60 * 60 * 1000));
-                console.log(`📊 Adjusted duration: ${newDiffInDays} days`);
+      // Always fetch and set subscription dates from Stripe, retrying if needed
+      const fetchAndSetSubscriptionDates = async (user, maxRetries = 3, delayMs = 5000) => {
+        let attempt = 0;
+        while (attempt < maxRetries) {
+          try {
+            const subscription = await stripe.subscriptions.retrieve(user.stripeSubscriptionId);
+            let startTimestamp = subscription.current_period_start || subscription.start_date || subscription.created;
+            let endTimestamp = subscription.current_period_end || subscription.trial_end;
+            if (startTimestamp) {
+              const startDate = new Date(startTimestamp * 1000);
+              let endDate;
+              if (endTimestamp) {
+                endDate = new Date(endTimestamp * 1000);
+              } else {
+                endDate = new Date(startDate);
+                endDate.setFullYear(endDate.getFullYear() + 1);
               }
-
-              user.subscriptionStart = startDate;
-              user.subscriptionEnd = endDate;
-              user.subscriptionStatus = "active";
-              user.autoRenew = !subscription.cancel_at_period_end;
-
-              await user.save();
-
-              console.log("✅✅✅ SUBSCRIPTION DATES SUCCESSFULLY SET FROM INVOICE:");
-              console.log("Start:", user.subscriptionStart.toISOString());
-              console.log("End:", user.subscriptionEnd.toISOString());
-              console.log("Duration:", Math.round((user.subscriptionEnd - user.subscriptionStart) / (24 * 60 * 60 * 1000)), "days");
-            } else {
-              console.log("❌ Invalid date values after conversion");
-            }
-          } else {
-            console.log("⚠️ No valid start date found in subscription");
-
-            // If no dates yet, schedule a delayed check
-            console.log("⏰ Scheduling delayed date check...");
-            setTimeout(async () => {
-              try {
-                console.log("Running delayed date check for subscription:", user.stripeSubscriptionId);
-                const retrySubscription = await stripe.subscriptions.retrieve(user.stripeSubscriptionId);
-
-                // Use the same logic for delayed check
-                let retryStartTimestamp = retrySubscription.current_period_start || retrySubscription.start_date || retrySubscription.created;
-                let retryEndTimestamp = retrySubscription.current_period_end || retrySubscription.trial_end;
-
-                if (retryStartTimestamp) {
-                  const startDate = new Date(retryStartTimestamp * 1000);
-                  let endDate;
-
-                  if (retryEndTimestamp) {
-                    endDate = new Date(retryEndTimestamp * 1000);
-                  } else {
-                    endDate = new Date(startDate);
-                    endDate.setFullYear(endDate.getFullYear() + 1);
-                  }
-
-                  if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
-                    console.log("📅 Setting dates from delayed check:");
-                    console.log("Start:", startDate.toISOString());
-                    console.log("End:", endDate.toISOString());
-
-                    user.subscriptionStart = startDate;
-                    user.subscriptionEnd = endDate;
-                    user.subscriptionStatus = "active";
-
-                    await user.save();
-                    console.log("✅ Delayed date check successful!");
-                  }
-                }
-              } catch (error) {
-                console.log("❌ Delayed date check failed:", error.message);
+              if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
+                user.subscriptionStart = startDate;
+                user.subscriptionEnd = endDate;
+                user.subscriptionStatus = "active";
+                user.autoRenew = !subscription.cancel_at_period_end;
+                await user.save();
+                console.log("✅ Subscription dates set:", startDate.toISOString(), endDate.toISOString());
+                return true;
               }
-            }, 5000); // Wait 5 seconds and try again
+            }
+            console.log(`Attempt ${attempt + 1}: Subscription dates not available yet.`);
+          } catch (error) {
+            console.error(`Attempt ${attempt + 1}: Error fetching subscription:`, error.message);
           }
-        } catch (error) {
-          console.error("❌ Error retrieving subscription:", error.message);
+          attempt++;
+          if (attempt < maxRetries) {
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+          }
         }
+        console.log("❌ Failed to set subscription dates after retries.");
+        return false;
+      };
+
+      if (user.stripeSubscriptionId) {
+        await fetchAndSetSubscriptionDates(user);
       }
     }
 

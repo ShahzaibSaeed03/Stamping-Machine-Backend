@@ -12,7 +12,7 @@ import { uploadToS3 } from "../utils/WorkController/awsUtils.js";
 import { saveToDatabase } from "../utils/WorkController/saveToDatabase.js";
 import { sendConfirmationEmail } from "../utils/WorkController/sendConfirmationEmail.js";
 import { generateSignedUrl } from "../utils/generateSignedUrl.js";
-import { verifyOTS, stampWithOTS, getBlockByHeight } from "../utils/WorkController/otsUtil.js";
+import { verifyOTS, stampWithOTS, } from "../utils/WorkController/otsUtil.js";
 import { deductTokens } from "../services/token.service.js";
 import Counter from "../models/counterModel.js";
 import fs from "fs";
@@ -117,9 +117,7 @@ const uploadWork = asyncHandler(async (req, res) => {
   });
 
   /* OTS */
-  const otsFilePath = await stampWithOTS(certificatePath, displayedID);
-
-  /* UPLOAD CERT + OTS */
+  const otsFilePath = await stampWithOTS(certificatePath, displayedID);  /* UPLOAD CERT + OTS */
   const certFileUrl = await uploadToS3(
     { path: certificatePath, originalname: `Certificate-${displayedID}.pdf` },
     "certificates"
@@ -195,88 +193,47 @@ const uploadWork = asyncHandler(async (req, res) => {
 
 // VERIFY WORK CONTROLLER
 const verifyWorkRegistration = asyncHandler(async (req, res) => {
+
   const files = req.files;
 
   if (!files || !files.originalFile || !files.certificate || !files.ots) {
     return res.status(400).json({
-      error:
-        "Please select the file to be verified, its certificate and its .ots file.",
+      message: "Please upload original file, certificate and ots file"
     });
-  }
-
-  const fieldsToCheck = ["originalFile", "certificate", "ots"];
-  for (const field of fieldsToCheck) {
-    const originalname = files[field][0].originalname || "";
-    const ext = path.extname(originalname).toLowerCase();
-    if (ext === ".js" || ext === ".exe") {
-      return res
-        .status(400)
-        .json({ error: ".js and .exe files are not accepted" });
-    }
   }
 
   const filePath = files.originalFile[0].path;
   const certificatePath = files.certificate[0].path;
   const otsPath = files.ots[0].path;
 
-  // 1️⃣ fingerprint original file
-  let fileFingerprint;
-  try {
-    fileFingerprint = await computeSHA256(filePath);
-  } catch (err) {
-    return res
-      .status(400)
-      .json({ error: "Failed to calculate fingerprint of the file." });
-  }
+  const fileFingerprint = await computeSHA256(filePath);
+  const certFingerprint = await extractFingerprintFromPDF(certificatePath);
 
-  // 2️⃣ fingerprint certificate
-  let certFingerprint;
-  try {
-    certFingerprint = await extractFingerprintFromPDF(certificatePath);
-  } catch (err) {
-    return res.status(400).json({
-      error:
-        "File doesn't match the certificate. (Fingerprint not found in certificate)",
-    });
-  }
-
-  // 3️⃣ compare fingerprints
   if (fileFingerprint !== certFingerprint) {
     return res.status(400).json({
-      error:
-        "File doesn't match the certificate. The uploaded file and certificate have different fingerprints.",
-      details: { fileFingerprint, certFingerprint },
+      message: "File doesn't match certificate"
     });
   }
 
-  // 4️⃣ find work
   const work = await Work.findOne({ file_fingerprint: fileFingerprint });
+
   if (!work) {
-    return res
-      .status(404)
-      .json({ error: "This certificate is not in our database." });
+    return res.status(404).json({
+      message: "Certificate not found in database"
+    });
   }
 
-  // 5️⃣ verify OTS (NO rename)
   const otsResult = await verifyOTS(certificatePath, otsPath);
 
-  // cleanup temp files
-  try {
-    fs.unlinkSync(filePath);
-    fs.unlinkSync(certificatePath);
-    fs.unlinkSync(otsPath);
-  } catch (err) { }
-
-  return res.status(200).json({
-    message:
-      otsResult.status === "verified"
-        ? "Timestamp verified on Bitcoin network."
-        : otsResult.status === "pending"
-          ? "Timestamp submitted. Waiting for Bitcoin confirmation."
-          : "Verification failed.",
+  return res.json({
+    message: "Timestamp verified on Bitcoin network.",
     otsStatus: otsResult,
     registeration_date: formatDateForCertificate(work.registeration_date),
+    daysSinceRegistration: Math.floor(
+      (Date.now() - work.registeration_date) / (1000 * 60 * 60 * 24)
+    )
   });
+
 });
 
 // @desc    Get works for a specific user

@@ -1,112 +1,65 @@
+import { exec } from "child_process";
+import { promisify } from "util";
 import fs from "fs";
 import path from "path";
-import OpenTimestamps from "opentimestamps";
-import { fileURLToPath } from "url";
 
-// __dirname replacement for ES modules
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const execAsync = promisify(exec);
 
-/**
- * Create OTS timestamp for a file
- * filePath → local file saved by multer
- * displayedID → your DB/public id used in filename
- */
-export const stampWithOTS = async (filePath, displayedID) => {
+const otsCommand =
+  process.platform === "win32" ? "ots-cli.js.cmd" : "ots-cli";
+
+export const stampWithOTS = async (certificatePath, displayedID) => {
   try {
-    // read file
-    const data = fs.readFileSync(filePath);
 
-    // create detached timestamp object
-    const detached = OpenTimestamps.DetachedTimestampFile.fromBytes(
-      new OpenTimestamps.Ops.OpSHA256(),
-      data
-    );
+    // create timestamp
+    await execAsync(`${otsCommand} stamp "${certificatePath}"`);
 
-    // send to calendar servers
-    await OpenTimestamps.stamp(detached);
+    const defaultOTS = `${certificatePath}.ots`;
 
-    // build output path
-    const dir = path.dirname(filePath);
-    const otsPath = path.join(dir, `Timestamp-${displayedID}.ots`);
+    const dir = path.dirname(certificatePath);
+    const customOTS = path.join(dir, `Timestamp-${displayedID}.ots`);
 
-    // save ots file
-    fs.writeFileSync(otsPath, detached.serializeToBytes());
+    fs.renameSync(defaultOTS, customOTS);
 
-    return otsPath;
+    return customOTS;
+
   } catch (err) {
     console.error("OTS stamp error:", err);
-    throw new Error("Failed to create .ots file");
+    throw new Error("Failed to create timestamp");
   }
 };
 
-/**
- * Verify OTS proof against file
- * NOTE: first verification is usually pending until Bitcoin confirmation
- */
-export const verifyOTS = async (filePath, otsPath) => {
+
+export const verifyOTS = async (certificatePath, otsPath) => {
   try {
-    const otsBytes = fs.readFileSync(otsPath);
 
-    const detached =
-      OpenTimestamps.DetachedTimestampFile.deserialize(otsBytes);
+    const cmd = `${otsCommand} verify "${otsPath}" -f "${certificatePath}"`;
 
-    // upgrade proof
-    await OpenTimestamps.upgrade(detached);
+    const { stdout } = await execAsync(cmd);
 
-    const hasBitcoin =
-      detached.timestamp &&
-      detached.timestamp.attestations &&
-      detached.timestamp.attestations.length > 0;
+    let blockMatch = stdout.match(/Bitcoin block (\d+)/);
+    let block = blockMatch ? blockMatch[1] : null;
 
-    if (!hasBitcoin) {
+    if (block) {
       return {
-        status: "pending",
-        message:
-          "Timestamp submitted to calendars. Waiting for Bitcoin confirmation.",
+        status: "verified",
+        message: "Timestamp verified on Bitcoin blockchain",
+        bitcoinBlock: block,
+        attestedAt: new Date().toISOString().split("T")[0] + " PKT"
       };
     }
 
     return {
-      status: "verified",
-      message: "Timestamp anchored in Bitcoin blockchain.",
-      attestations: detached.timestamp.attestations,
+      status: "pending",
+      message: "Timestamp exists but not yet confirmed on Bitcoin."
     };
+
   } catch (err) {
-    console.error("Verification error:", err);
 
     return {
       status: "error",
-      message: "Invalid or corrupted .ots file.",
-      error: err.message,
+      message: err.message
     };
-  }
-};
-/**
- * Fetch Bitcoin block info by height
- * Used when proof becomes confirmed
- */
-export const getBlockByHeight = async (height) => {
-  try {
-    const hashRes = await fetch(
-      `https://mempool.space/api/block-height/${height}`
-    );
-    if (!hashRes.ok) {
-      throw new Error(`Failed to fetch block hash for height ${height}`);
-    }
 
-    const hash = (await hashRes.text()).trim();
-
-    const blockRes = await fetch(
-      `https://mempool.space/api/block/${hash}`
-    );
-    if (!blockRes.ok) {
-      throw new Error(`Failed to fetch block for hash ${hash}`);
-    }
-
-    return await blockRes.json();
-  } catch (error) {
-    console.error("getBlockByHeight error:", error?.message || error);
-    return null;
   }
 };

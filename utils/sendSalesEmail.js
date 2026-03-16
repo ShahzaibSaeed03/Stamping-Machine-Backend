@@ -8,24 +8,26 @@ export const sendSalesEmail = async ({
   type
 }) => {
 
+  const amountText = amount ? `<p><strong>Amount:</strong> ${amount} ${currency.toUpperCase()}</p>` : '';
+
   const html = `
     <div style="font-family:Arial,sans-serif">
-      <h2>New Payment Received</h2>
+      <h2>New ${type} Event</h2>
 
       <p><strong>Customer:</strong> ${name}</p>
       <p><strong>Email:</strong> ${userEmail}</p>
 
-      <p><strong>Purchase Type:</strong> ${type}</p>
+      <p><strong>Event Type:</strong> ${type}</p>
 
-      <p><strong>Amount:</strong> ${amount} ${currency.toUpperCase()}</p>
+      ${amountText}
 
-      <p>Payment completed successfully via Stripe.</p>
+      <p>Event processed successfully.</p>
     </div>
   `;
 
   await sendEmail({
     to: process.env.SALES_EMAIL,
-    subject: "New Payment Received",
+    subject: `New ${type} Event`,
     html
   });
 

@@ -3,7 +3,7 @@ import TokenTransaction from "../models/tokenTransactionModel.js";
 
 /* ADD TOKENS */
 
-export const addTokens = async (userId, amount, type, note="") => {
+export const addTokens = async (userId, amount, type, note="", invoiceId=null) => {
 
   const user = await User.findById(userId);
 
@@ -14,7 +14,8 @@ export const addTokens = async (userId, amount, type, note="") => {
     user: userId,
     amount,
     type,
-    note
+    note,
+    invoiceId
   });
 };
 

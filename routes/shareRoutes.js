@@ -11,13 +11,16 @@ import { userAuthMiddleware } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
 
-// Share management routes - require authentication
+// Protected routes
 router.post("/create", userAuthMiddleware, createShareLink);
 router.get("/list/:workId", userAuthMiddleware, listWorkShares);
 router.delete("/:shareId", userAuthMiddleware, deleteShare);
-router.post("/set-password",userAuthMiddleware,setSharePassword);
+router.post("/set-password", userAuthMiddleware, setSharePassword);
 
+// Public routes
 router.post("/access-by-reference", accessByReference);
-// Public share access route - no auth required, but POST to handle password in body
-router.post("/:shareId", getSharedWork);
-export default router; 
+
+// Share link access (no password)
+router.get("/:shareId", getSharedWork);
+
+export default router;

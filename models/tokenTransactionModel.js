@@ -25,9 +25,13 @@ const tokenTransactionSchema = mongoose.Schema(
     default: null
   },
 
-  note: String
-},
-{ timestamps: true }
+  note: String,
+
+  invoiceId: {
+    type: String,
+    index: true
+  }
+}
 );
 
 export default mongoose.model("TokenTransaction", tokenTransactionSchema);

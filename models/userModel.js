@@ -41,7 +41,20 @@ const userSchema = mongoose.Schema(
     phone: String,
     sameAsPersonal: Boolean
   },
-
+ 
+  processedCheckouts: {
+    type: [String],
+    default: []
+  },
+  processedPayments: {
+    type: [String],
+    default: []
+  },
+  // ADD THIS NEW FIELD - to track which invoices have already sent emails
+  processedEmails: {
+    type: [String],
+    default: []
+  },
   subscriptionStatus: {
     type: String,
     enum: [

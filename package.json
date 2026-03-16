@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "start": "node -r dotenv/config server.js",
-    "dev": "nodemon -r dotenv/config server.js"
+    "dev": "nodemon -r dotenv/config server.js",
+    "fix-index": "node scripts/fixTokenTransactionIndex.js"
   },
   "keywords": [],
   "author": "",

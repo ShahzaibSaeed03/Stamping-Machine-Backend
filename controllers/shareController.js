@@ -78,6 +78,7 @@ export const setSharePassword = asyncHandler(async (req, res) => {
   } catch (err) {
     console.log("Email sending failed:", err.message);
   }
+  
 
   res.json({
     message: "Password set",

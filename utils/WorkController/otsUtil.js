@@ -39,31 +39,55 @@ export const verifyOTS = async (certificatePath, otsPath) => {
 
     const cmd = `${otsCommand} verify "${otsPath}" -f "${certificatePath}"`;
 
-    const { stdout } = await execAsync(cmd);
+    const { stdout, stderr } = await execAsync(cmd);
 
-    let blockMatch = stdout.match(/Bitcoin block (\d+)/);
-    let block = blockMatch ? blockMatch[1] : null;
+    const output = `${stdout}\n${stderr}`;
 
-    if (block) {
+    if (output.includes("Success! Bitcoin block")) {
+
+      const match = output.match(/Bitcoin block (\d+)/);
+      const block = match ? match[1] : null;
+
       return {
         status: "verified",
         message: "Timestamp verified on Bitcoin blockchain",
         bitcoinBlock: block,
-        attestedAt: new Date().toISOString().split("T")[0] + " PKT"
+        verified: true
+      };
+    }
+
+    if (output.includes("Pending")) {
+      return {
+        status: "pending",
+        message: "Timestamp submitted but not yet confirmed on Bitcoin"
       };
     }
 
     return {
-      status: "pending",
-      message: "Timestamp exists but not yet confirmed on Bitcoin."
+      status: "error",
+      message: output
     };
 
   } catch (err) {
 
+    const output = err.stdout || err.stderr || err.message;
+
+    if (output && output.includes("Success! Bitcoin block")) {
+
+      const match = output.match(/Bitcoin block (\d+)/);
+      const block = match ? match[1] : null;
+
+      return {
+        status: "verified",
+        message: "Timestamp verified on Bitcoin blockchain",
+        bitcoinBlock: block,
+        verified: true
+      };
+    }
+
     return {
       status: "error",
-      message: err.message
+      message: output
     };
-
   }
 };

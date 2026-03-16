@@ -6,7 +6,7 @@ import path from "path";
 const execAsync = promisify(exec);
 
 const otsCommand =
-  process.platform === "win32" ? "ots-cli.js.cmd" : "ots-cli";
+  process.platform === "win32" ? "ots-cli.js.cmd" : "ots-cli.js";
 
 export const stampWithOTS = async (certificatePath, displayedID) => {
   try {

@@ -11,10 +11,14 @@ const otsCommand =
 export const stampWithOTS = async (certificatePath, displayedID) => {
   try {
 
-    // create timestamp
-    await execAsync(`${otsCommand} stamp "${certificatePath}"`);
-
     const defaultOTS = `${certificatePath}.ots`;
+
+    // remove existing proof if it exists
+    if (fs.existsSync(defaultOTS)) {
+      fs.unlinkSync(defaultOTS);
+    }
+
+    await execAsync(`${otsCommand} stamp "${certificatePath}"`);
 
     const dir = path.dirname(certificatePath);
     const customOTS = path.join(dir, `Timestamp-${displayedID}.ots`);
@@ -24,7 +28,7 @@ export const stampWithOTS = async (certificatePath, displayedID) => {
     return customOTS;
 
   } catch (err) {
-    console.error("OTS stamp error:", err);
+    console.error("OTS stamp error:", err.stderr || err.stdout || err);
     throw new Error("Failed to create timestamp");
   }
 };

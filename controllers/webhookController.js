@@ -27,8 +27,7 @@ export const stripeWebhook = async (req, res) => {
 
   try {
     /* =======================================================
-       CHECKOUT COMPLETED - Process token purchases only
-       NO EMAILS HERE - Let invoice.payment_succeeded handle emails
+       CHECKOUT COMPLETED
     ======================================================== */
 
     if (event.type === "checkout.session.completed") {
@@ -46,7 +45,6 @@ export const stripeWebhook = async (req, res) => {
         return res.json({ received: true });
       }
 
-      // Handle SUBSCRIPTION checkout
       if (session.mode === "subscription") {
         // Save customer ID if not already set
         if (!user.stripeCustomerId) {
@@ -61,47 +59,88 @@ export const stripeWebhook = async (req, res) => {
 
         // Set status to incomplete initially
         user.subscriptionStatus = "incomplete";
+
         await user.save();
         console.log("✅ User updated with incomplete status");
-        
-        // NO EMAIL HERE - invoice.payment_succeeded will handle it
       }
 
-      // Handle TOKEN PURCHASE checkout
+      /* TOKEN PURCHASE */
       if (session.mode === "payment" && session.metadata?.tokens) {
         const tokens = Number(session.metadata.tokens);
 
-        // Check if this checkout was already processed
+        // Add tokens with description only (no invoice ID for token purchases)
+        await addTokens(
+          user._id,
+          tokens,
+          "purchase",
+          "Token purchase",
+          null // Pass null for invoiceId to avoid unique index issues
+        );
+
+        // Store in session that we've processed this checkout
         if (!user.processedCheckouts) {
           user.processedCheckouts = [];
         }
         
         if (!user.processedCheckouts.includes(session.id)) {
-          // Add tokens with description only (no invoice ID for token purchases)
-          await addTokens(
-            user._id,
-            tokens,
-            "purchase",
-            "Token purchase",
-            null // Pass null for invoiceId to avoid unique index issues
-          );
-
-          // Mark this checkout as processed
           user.processedCheckouts.push(session.id);
           await user.save();
-
-          console.log("✅ Token purchase completed - tokens added:", tokens);
-        } else {
-          console.log("⚠️ Checkout already processed for tokens, skipping:", session.id);
         }
-        
-        // NO EMAIL HERE - invoice.payment_succeeded will handle it
+
+        console.log("✅ Token purchase completed - tokens added:", tokens);
+        // NO EMAIL HERE - Let invoice.payment_succeeded handle it
       }
     }
 
     /* =======================================================
+       CUSTOMER SUBSCRIPTION CREATED
+    ======================================================== */
+
+    if (event.type === "customer.subscription.created") {
+      const subscription = event.data.object;
+
+      // Find user by customer ID
+      const user = await User.findOne({
+        stripeCustomerId: subscription.customer
+      });
+
+      if (!user) {
+        console.log("No user found for subscription created event - customer:", subscription.customer);
+        return res.json({ received: true });
+      }
+
+      // Save subscription ID
+      user.stripeSubscriptionId = subscription.id;
+      user.subscriptionStatus = mapStripeStatus(subscription.status);
+      user.autoRenew = !subscription.cancel_at_period_end;
+
+      // Try to set dates if available
+      if (subscription.current_period_start && subscription.current_period_end) {
+        try {
+          const startDate = new Date(subscription.current_period_start * 1000);
+          const endDate = new Date(subscription.current_period_end * 1000);
+
+          if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
+            console.log("📅 Setting subscription dates from subscription.created:");
+            console.log("Start:", startDate.toISOString());
+            console.log("End:", endDate.toISOString());
+
+            user.subscriptionStart = startDate;
+            user.subscriptionEnd = endDate;
+          }
+        } catch (error) {
+          console.log("⚠️ Error setting dates in subscription.created:", error.message);
+        }
+      } else {
+        console.log("⚠️ Subscription created without period dates - will fetch from API");
+      }
+
+      await user.save();
+      console.log("Subscription created with status:", subscription.status, "→", user.subscriptionStatus);
+    }
+
+    /* =======================================================
        INVOICE PAYMENT SUCCEEDED - SINGLE SOURCE OF TRUTH FOR EMAILS
-       This is the ONLY place where emails are sent
     ======================================================== */
 
     if (event.type === "invoice.payment_succeeded") {
@@ -127,81 +166,98 @@ export const stripeWebhook = async (req, res) => {
 
       console.log("✅ Found user for invoice:", user.email);
 
-      // Initialize tracking arrays if they don't exist
-      if (!user.processedInvoices) {
-        user.processedInvoices = [];
+      // ===== PROCESS SUBSCRIPTION LOGIC (if applicable) =====
+      if (invoice.billing_reason === "subscription_create" || 
+          invoice.billing_reason === "subscription_cycle" ||
+          invoice.billing_reason === "subscription_update") {
+        
+        console.log("📋 This is a subscription invoice - processing subscription logic");
+
+        // CHECK IF TOKENS WERE ALREADY ADDED FOR THIS INVOICE
+        if (!user.processedInvoices) {
+          user.processedInvoices = [];
+        }
+
+        // Check if this invoice was already processed
+        if (!user.processedInvoices.includes(invoice.id)) {
+          /* ADD SUBSCRIPTION BONUS TOKENS */
+          await addTokens(
+            user._id,
+            5,
+            "bonus",
+            "Monthly subscription bonus",
+            invoice.id // Pass the invoice ID
+          );
+          
+          // Add invoice ID to processed list
+          user.processedInvoices.push(invoice.id);
+          await user.save();
+          
+          console.log("✅ Added 5 subscription bonus tokens for invoice:", invoice.id);
+        } else {
+          console.log("⚠️ Invoice already processed for tokens, skipping:", invoice.id);
+        }
+
+        // Always fetch and set subscription dates from Stripe
+        const fetchAndSetSubscriptionDates = async (user, maxRetries = 3, delayMs = 5000) => {
+          let attempt = 0;
+          while (attempt < maxRetries) {
+            try {
+              const subscription = await stripe.subscriptions.retrieve(user.stripeSubscriptionId);
+              let startTimestamp = subscription.current_period_start || subscription.start_date || subscription.created;
+              let endTimestamp = subscription.current_period_end || subscription.trial_end;
+              if (startTimestamp) {
+                const startDate = new Date(startTimestamp * 1000);
+                let endDate;
+                if (endTimestamp) {
+                  endDate = new Date(endTimestamp * 1000);
+                } else {
+                  endDate = new Date(startDate);
+                  endDate.setFullYear(endDate.getFullYear() + 1);
+                }
+                if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
+                  user.subscriptionStart = startDate;
+                  user.subscriptionEnd = endDate;
+                  user.subscriptionStatus = "active";
+                  user.autoRenew = !subscription.cancel_at_period_end;
+                  await user.save();
+                  console.log("✅ Subscription dates set:", startDate.toISOString(), endDate.toISOString());
+                  return true;
+                }
+              }
+              console.log(`Attempt ${attempt + 1}: Subscription dates not available yet.`);
+            } catch (error) {
+              console.error(`Attempt ${attempt + 1}: Error fetching subscription:`, error.message);
+            }
+            attempt++;
+            if (attempt < maxRetries) {
+              await new Promise(resolve => setTimeout(resolve, delayMs));
+            }
+          }
+          console.log("❌ Failed to set subscription dates after retries.");
+          return false;
+        };
+
+        if (user.stripeSubscriptionId) {
+          await fetchAndSetSubscriptionDates(user);
+        }
+      } else {
+        console.log("📋 This is a one-time payment invoice - skipping subscription logic");
       }
+
+      // ===== ALWAYS SEND SINGLE RECEIPT (for both subscription and one-time payments) =====
+      // Check if we already sent an email for this invoice
       if (!user.processedEmails) {
         user.processedEmails = [];
       }
 
-      // Check if this invoice was already processed (prevents duplicate processing)
-      const isInvoiceProcessed = user.processedInvoices.includes(invoice.id);
-      
-      // ===== PROCESS SUBSCRIPTION LOGIC (if applicable) =====
-      if ((invoice.billing_reason === "subscription_create" || 
-           invoice.billing_reason === "subscription_cycle" ||
-           invoice.billing_reason === "subscription_update") && !isInvoiceProcessed) {
-        
-        console.log("📋 This is a subscription invoice - processing subscription logic");
-
-        /* ADD SUBSCRIPTION BONUS TOKENS */
-        await addTokens(
-          user._id,
-          5,
-          "bonus",
-          "Monthly subscription bonus",
-          invoice.id // Pass the invoice ID
-        );
-        
-        console.log("✅ Added 5 subscription bonus tokens for invoice:", invoice.id);
-
-        // Fetch and set subscription dates
-        if (user.stripeSubscriptionId) {
-          try {
-            const subscription = await stripe.subscriptions.retrieve(user.stripeSubscriptionId);
-            
-            if (subscription.current_period_start && subscription.current_period_end) {
-              const startDate = new Date(subscription.current_period_start * 1000);
-              const endDate = new Date(subscription.current_period_end * 1000);
-              
-              user.subscriptionStart = startDate;
-              user.subscriptionEnd = endDate;
-              user.subscriptionStatus = mapStripeStatus(subscription.status);
-              user.autoRenew = !subscription.cancel_at_period_end;
-              
-              console.log("✅ Subscription dates set:", startDate.toISOString(), endDate.toISOString());
-            }
-          } catch (error) {
-            console.error("Error fetching subscription:", error.message);
-          }
-        }
-
-        // Mark invoice as processed
-        user.processedInvoices.push(invoice.id);
-      } else if (invoice.billing_reason === "subscription_create" || 
-                invoice.billing_reason === "subscription_cycle" ||
-                invoice.billing_reason === "subscription_update") {
-        console.log("⚠️ Subscription invoice already processed, skipping token addition:", invoice.id);
-      }
-
-      // ===== SEND SINGLE EMAIL RECEIPT (ONLY IF NOT ALREADY SENT) =====
       if (!user.processedEmails.includes(invoice.id)) {
-        
-        // Get receipt URL
         const receiptUrl = invoice.hosted_invoice_url || invoice.invoice_pdf;
-        
-        // Determine next billing date for subscriptions
-        let nextBillingDate;
-        if (user.subscriptionEnd) {
-          nextBillingDate = user.subscriptionEnd.toLocaleDateString('en-US', { 
-            year: 'numeric', 
-            month: 'long', 
-            day: 'numeric' 
-          });
-        }
+        const nextBillingDate = user.subscriptionEnd ? 
+          user.subscriptionEnd.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : 
+          undefined;
 
-        // Determine payment type
+        // Determine payment type based on billing reason
         let paymentType = "One-time Payment";
         if (invoice.billing_reason === "subscription_create") {
           paymentType = "New Subscription";
@@ -209,7 +265,7 @@ export const stripeWebhook = async (req, res) => {
           paymentType = "Subscription Renewal";
         } else if (invoice.billing_reason === "subscription_update") {
           paymentType = "Subscription Update";
-        } else if (invoice.lines?.data[0]?.description?.toLowerCase().includes("token")) {
+        } else if (invoice.lines?.data[0]?.description?.includes("token")) {
           paymentType = "Tokens Purchase";
         }
 
@@ -224,10 +280,10 @@ export const stripeWebhook = async (req, res) => {
         });
         console.log("✅ SINGLE receipt email sent to customer for invoice:", invoice.id);
 
-        // Send SINGLE sales email to team
+        // Send sales email for tracking
         await sendSalesEmail({
           userEmail: user.email,
-          name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Customer',
+          name: `${user.firstName} ${user.lastName}`,
           amount: invoice.amount_paid / 100,
           currency: invoice.currency,
           type: paymentType,
@@ -235,73 +291,91 @@ export const stripeWebhook = async (req, res) => {
           receiptUrl: receiptUrl,
           nextBillingDate: nextBillingDate
         });
-        console.log("✅ SINGLE sales email sent to team for invoice:", invoice.id);
+        console.log("✅ Sales email sent to team");
 
-        // Mark email as processed
+        // Mark as processed
         user.processedEmails.push(invoice.id);
+        await user.save();
       } else {
         console.log("⚠️ Email already sent for this invoice, skipping:", invoice.id);
       }
-
-      // Save all user changes
-      await user.save();
     }
 
     /* =======================================================
-       CUSTOMER SUBSCRIPTION CREATED - Update user data only
-       NO EMAILS HERE
+       INVOICE PAYMENT PAID - PREVENT DUPLICATES
     ======================================================== */
 
-    if (event.type === "customer.subscription.created") {
-      const subscription = event.data.object;
-
-      // Find user by customer ID
-      const user = await User.findOne({
-        stripeCustomerId: subscription.customer
+    if (event.type === "invoice.payment.paid" || event.type === "invoice_payment.paid") {
+      const invoicePayment = event.data.object;
+      
+      console.log("\n🔍 Processing invoice.payment.paid event:", {
+        id: invoicePayment.id,
+        invoice: invoicePayment.invoice,
+        customer: invoicePayment.customer
       });
 
-      if (!user) {
-        console.log("No user found for subscription created event - customer:", subscription.customer);
+      // Try to get the invoice ID from the payment object
+      const invoiceId = invoicePayment.invoice;
+      
+      if (!invoiceId) {
+        console.log("⚠️ No invoice ID in invoice.payment.paid event, skipping");
         return res.json({ received: true });
       }
 
-      // Save subscription data
-      user.stripeSubscriptionId = subscription.id;
-      user.subscriptionStatus = mapStripeStatus(subscription.status);
-      user.autoRenew = !subscription.cancel_at_period_end;
+      // Find the user by retrieving the invoice first to get customer ID
+      try {
+        const invoice = await stripe.invoices.retrieve(invoiceId);
+        const user = await User.findOne({
+          stripeCustomerId: invoice.customer
+        });
 
-      // Set dates if available
-      if (subscription.current_period_start && subscription.current_period_end) {
-        try {
-          const startDate = new Date(subscription.current_period_start * 1000);
-          const endDate = new Date(subscription.current_period_end * 1000);
-
-          if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
-            user.subscriptionStart = startDate;
-            user.subscriptionEnd = endDate;
-          }
-        } catch (error) {
-          console.log("⚠️ Error setting dates in subscription.created:", error.message);
+        if (!user) {
+          console.log("❌ No user found for invoice.payment.paid - customer:", invoice.customer);
+          return res.json({ received: true });
         }
-      }
 
-      await user.save();
-      console.log("Subscription created with status:", subscription.status, "→", user.subscriptionStatus);
-      
-      // NO EMAIL HERE - invoice.payment_succeeded will handle it
+        console.log("✅ Found user for invoice.payment.paid:", user.email);
+        console.log("⚠️ Skipping email in invoice.payment.paid to prevent duplicates");
+        // NO EMAILS HERE - invoice.payment_succeeded already handled it
+      } catch (error) {
+        console.log("❌ Error retrieving invoice:", error.message);
+      }
     }
 
     /* =======================================================
-       SUBSCRIPTION UPDATED - Update user data only
-       NO EMAILS HERE
+       PAYMENT INTENT SUCCEEDED - DISABLED (USING INVOICE INSTEAD)
+    ======================================================== */
+
+    if (event.type === "payment_intent.succeeded") {
+      // WE DON'T SEND EMAILS HERE - Using invoice.payment_succeeded as single source of truth
+      console.log("ℹ️ payment_intent.succeeded received - skipping email to prevent duplicates");
+      
+      // Still process any necessary logic but NO EMAILS
+      const paymentIntent = event.data.object;
+      const userId = paymentIntent.metadata?.userId;
+      
+      if (userId) {
+        // You could do other processing here if needed
+        console.log("Payment intent succeeded for user:", userId);
+      }
+      
+      return res.json({ received: true });
+    }
+
+    /* =======================================================
+       SUBSCRIPTION UPDATED
     ======================================================== */
 
     if (event.type === "customer.subscription.updated") {
       const subscription = event.data.object;
 
-      console.log("\n🔄 Processing subscription.updated:", {
+      console.log("\n🔄 Processing subscription.updated:");
+      console.log({
         id: subscription.id,
-        status: subscription.status
+        status: subscription.status,
+        current_period_start: subscription.current_period_start,
+        current_period_end: subscription.current_period_end,
+        customer: subscription.customer
       });
 
       let user = await User.findOne({
@@ -319,16 +393,30 @@ export const stripeWebhook = async (req, res) => {
         }
       }
 
-      // Update dates
+      console.log("✅ Found user for subscription update:", user.email);
+
+      // Update dates when available
       let startTimestamp = subscription.current_period_start || subscription.start_date || subscription.created;
       let endTimestamp = subscription.current_period_end || subscription.trial_end;
 
-      if (startTimestamp && endTimestamp) {
+      if (startTimestamp) {
         try {
           const startDate = new Date(startTimestamp * 1000);
-          const endDate = new Date(endTimestamp * 1000);
+          let endDate;
+
+          if (endTimestamp) {
+            endDate = new Date(endTimestamp * 1000);
+          } else {
+            endDate = new Date(startDate);
+            endDate.setFullYear(endDate.getFullYear() + 1);
+            console.log("⚠️ No end timestamp in subscription.update, calculated 1 year from start");
+          }
 
           if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
+            console.log("📅 SETTING SUBSCRIPTION DATES FROM subscription.updated:");
+            console.log("Start:", startDate.toISOString());
+            console.log("End:", endDate.toISOString());
+
             user.subscriptionStart = startDate;
             user.subscriptionEnd = endDate;
             user.subscriptionStatus = mapStripeStatus(subscription.status);
@@ -339,19 +427,21 @@ export const stripeWebhook = async (req, res) => {
             }
 
             await user.save();
-            console.log("✅ Subscription dates updated");
+
+            console.log("✅✅✅ SUBSCRIPTION DATES SUCCESSFULLY UPDATED FROM subscription.updated:");
+            console.log("Start:", user.subscriptionStart.toISOString());
+            console.log("End:", user.subscriptionEnd.toISOString());
           }
         } catch (error) {
           console.error("❌ Error setting dates:", error.message);
         }
+      } else {
+        console.log("⚠️ Subscription update has no start date");
       }
-      
-      // NO EMAIL HERE - This is just data update
     }
 
     /* =======================================================
-       SUBSCRIPTION CANCELLED - Update user data only
-       NO EMAILS HERE
+       SUBSCRIPTION CANCELLED
     ======================================================== */
 
     if (event.type === "customer.subscription.deleted") {
@@ -379,20 +469,6 @@ export const stripeWebhook = async (req, res) => {
 
       await user.save();
       console.log("Subscription canceled");
-      
-      // NO EMAIL HERE - cancellation emails can be handled separately if needed
-    }
-
-    /* =======================================================
-       IGNORED EVENTS - No emails, no processing
-    ======================================================== */
-
-    // Explicitly ignore these events to prevent any accidental email sending
-    if (event.type === "payment_intent.succeeded" || 
-        event.type === "invoice.payment.paid" || 
-        event.type === "invoice_payment.paid") {
-      console.log(`ℹ️ ${event.type} received - ignoring to prevent duplicates`);
-      return res.json({ received: true });
     }
 
     return res.json({ received: true });
@@ -418,3 +494,6 @@ function mapStripeStatus(stripeStatus) {
 
   return statusMap[stripeStatus] || 'inactive';
 }
+
+
+

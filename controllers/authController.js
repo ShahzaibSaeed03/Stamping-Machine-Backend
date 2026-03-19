@@ -26,17 +26,7 @@ export const registerUser = asyncHandler(async (req, res) => {
     profession,
     refSource,
 
-    billingCompany,
-    billingName,
-    vatNumber,
-    billingAddress1,
-    billingAddress2,
-    billingZip,
-    billingCity,
-    billingState,
-    billingCountry,
-    billingPhone,
-    billingSameAsPersonal
+   
   } = req.body;
 
   if (!firstName || !lastName || !email || !password) {
@@ -89,19 +79,6 @@ export const registerUser = asyncHandler(async (req, res) => {
       refSource: refSource || ""
     },
 
-    billing: {
-      company: billingCompany || "",
-      name: billingName || "",
-      vatNumber: vatNumber || "",
-      address1: billingAddress1 || "",
-      address2: billingAddress2 || "",
-      zip: billingZip || "",
-      city: billingCity || "",
-      state: billingState || "",
-      country: billingCountry || "",
-      phone: billingPhone || "",
-      sameAsPersonal: billingSameAsPersonal || false
-    }
 
   });
 

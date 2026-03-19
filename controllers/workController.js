@@ -16,6 +16,7 @@ import { verifyOTS, stampWithOTS, } from "../utils/WorkController/otsUtil.js";
 import { deductTokens } from "../services/token.service.js";
 import Counter from "../models/counterModel.js";
 import fs from "fs";
+import crypto from "crypto";
 
 import path from "path";
 
@@ -262,8 +263,15 @@ const getWorksByUser = asyncHandler(async (req, res) => {
   const data = await Promise.all(
     works.map(async (work) => {
 
-      const share = shareMap.get(work._id.toString());
+      let share = shareMap.get(work._id.toString());
 
+      if (!share) {
+        share = await SharedWork.create({
+          id_work: work._id,
+          sha256_string: crypto.randomBytes(32).toString("hex"),
+          end_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+        });
+      }
       const downloadUrl = work.id_file
         ? await generateSignedUrl(work.id_file)
         : null;
@@ -282,20 +290,36 @@ const getWorksByUser = asyncHandler(async (req, res) => {
 
       return {
         _id: work._id,
+
+        /* BASIC */
         title: work.title,
         displayed_ID: work.displayed_ID,
         registration_date: work.registeration_date,
         file_name: work.file_name,
         status: work.status,
 
+        /* ✅ CERTIFICATE STYLE DETAILS */
+        workTitle: work.title,
+        copyrightOwner: work.copyright_owner,
+        additionalOwners: work.additional_copyright_owners || "-",
+
+        referenceNumber: work.displayed_ID,
+        registrationDateFormatted: formatDateForCertificate(work.registeration_date),
+
+        timestampAuthority: work.id_certificate?.TSA || "OpenTimestamps",
+
+        fingerprint: work.file_fingerprint,
+
+        /* FILE LINKS */
         downloadUrl,
         certificateUrl,
         certificateViewUrl,
         otsUrl,
 
-        /* ⭐ PASSWORD FLAG */
+        /* SHARE */
+        shareId: share.sha256_string,
+        shareUrl: `${process.env.FRONTEND_URL}shared/${share.sha256_string}`,
         passwordProtected: !!share?.password_hash,
-        shareId: share?.sha256_string || null,
 
         client: {
           _id: work.id_client._id,
@@ -342,4 +366,4 @@ const deleteWork = asyncHandler(async (req, res) => {
 
   res.json({ message: "Work deleted" });
 });
-export { uploadWork, verifyWorkRegistration, getAllWorks, getWorksByUser, deleteWork };
+export { uploadWork, verifyWorkRegistration, getAllWorks, getWorksByUser, deleteWork };    

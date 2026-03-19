@@ -5,7 +5,7 @@ import {
   getSubscriptionInfo,
   cancelSubscription,
   createCheckoutSession,
-  getInvoices,
+  getReceipts,
   resumeSubscription,
   getCurrentCard,
   createSetupIntent,
@@ -23,7 +23,7 @@ router.post("/subscription-checkout", userAuthMiddleware, createCheckoutSession)
 
 router.get("/checkout-success", checkoutSuccess);
 
-router.get("/invoices", userAuthMiddleware, getInvoices);
+router.get("/invoices", userAuthMiddleware, getReceipts);
 
 router.post("/resume", userAuthMiddleware, resumeSubscription);
 

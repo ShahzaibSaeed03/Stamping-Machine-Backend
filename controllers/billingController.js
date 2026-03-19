@@ -99,42 +99,44 @@ export const createCheckoutSession = asyncHandler(async (req, res) => {
 
   /* create subscription checkout */
 
-  const session = await stripe.checkout.sessions.create({
+const session = await stripe.checkout.sessions.create({
 
-    mode: "subscription",
-    ui_mode: "embedded",
+  mode: "subscription",
+  ui_mode: "embedded",
 
-    customer: customerId,
-    automatic_tax: {
-      enabled: true
-    },
+  redirect_on_completion: "always", // ✅ FIX
 
-    billing_address_collection: "required",
-    customer_update: { address: "auto" },
+  customer: customerId,
 
-    line_items: [
-      {
-        price: process.env.STRIPE_PRICE_ID,
-        quantity: 1
-      }
-    ],
-    saved_payment_method_options: {
-      payment_method_save: "enabled"
-    },
+  automatic_tax: { enabled: true },
 
+  billing_address_collection: "required",
+  customer_update: { address: "auto" },
+
+  line_items: [
+    {
+      price: process.env.STRIPE_PRICE_ID,
+      quantity: 1
+    }
+  ],
+
+  saved_payment_method_options: {
+    payment_method_save: "enabled"
+  },
+
+  metadata: {
+    userId: user._id.toString()
+  },
+
+  subscription_data: {
     metadata: {
       userId: user._id.toString()
-    },
+    }
+  },
 
-    subscription_data: {
-      metadata: {
-        userId: user._id.toString()
-      }
-    },
+  return_url: `${process.env.CLIENT_URL}/billing/success?session_id={CHECKOUT_SESSION_ID}`
 
-    return_url: `${process.env.CLIENT_URL}/billing/success?session_id={CHECKOUT_SESSION_ID}`
-
-  });
+});
 
   res.json({
     clientSecret: session.client_secret
@@ -209,7 +211,7 @@ export const resumeSubscription = asyncHandler(async (req, res) => {
 
 /* ================= GET INVOICES ================= */
 
-export const getInvoices = asyncHandler(async (req, res) => {
+export const getReceipts = asyncHandler(async (req, res) => {
 
   const user = await User.findById(req.user._id);
 
@@ -217,19 +219,26 @@ export const getInvoices = asyncHandler(async (req, res) => {
     return res.json([]);
   }
 
-  const invoices = await stripe.invoices.list({
+  const charges = await stripe.charges.list({
     customer: user.stripeCustomerId,
     limit: 20
   });
 
-  const formatted = invoices.data.map(inv => ({
-    id: inv.id,
-    amount: inv.amount_paid / 100,
-    currency: inv.currency,
-    status: inv.status,
-    invoicePdf: inv.invoice_pdf,
-    hostedInvoiceUrl: inv.hosted_invoice_url,
-    date: new Date(inv.created * 1000)
+  const formatted = charges.data.map(charge => ({
+    id: charge.id,
+    amount: charge.amount / 100,
+    currency: charge.currency,
+    status: charge.status,
+
+    /* ✅ THIS IS RECEIPT */
+    receiptUrl: charge.receipt_url,
+
+    /* optional */
+    paymentMethod: charge.payment_method_details?.type,
+    brand: charge.payment_method_details?.card?.brand,
+    last4: charge.payment_method_details?.card?.last4,
+
+    date: new Date(charge.created * 1000)
   }));
 
   res.json(formatted);

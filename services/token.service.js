@@ -1,36 +1,52 @@
 import User from "../models/userModel.js";
 import TokenTransaction from "../models/tokenTransactionModel.js";
 
-/* ADD TOKENS */
+/* ADD TOKENS (SAFE) */
+export const addTokens = async (
+  userId,
+  amount,
+  type,
+  note = "",
+  invoiceId = null
+) => {
+  try {
+    // 1. Insert transaction FIRST (idempotent guard)
+    await TokenTransaction.create({
+      user: userId,
+      amount,
+      type,
+      note,
+      invoiceId
+    });
 
-export const addTokens = async (userId, amount, type, note="", invoiceId=null) => {
+    // 2. Atomic increment
+    await User.updateOne(
+      { _id: userId },
+      { $inc: { tokens: amount } }
+    );
 
-  const user = await User.findById(userId);
+    console.log("✅ Tokens added safely:", amount, invoiceId);
 
-  user.tokens += amount;
-  await user.save();
-
-  await TokenTransaction.create({
-    user: userId,
-    amount,
-    type,
-    note,
-    invoiceId
-  });
+  } catch (err) {
+    if (err.code === 11000) {
+      console.log("ℹ️ Duplicate prevented:", invoiceId);
+      return;
+    }
+    throw err;
+  }
 };
 
-/* DEDUCT TOKENS */
+/* DEDUCT TOKENS (SAFE) */
+export const deductTokens = async (userId, amount, workId = null) => {
+  const result = await User.findOneAndUpdate(
+    { _id: userId, tokens: { $gte: amount } },
+    { $inc: { tokens: -amount } },
+    { new: true }
+  );
 
-export const deductTokens = async (userId, amount, workId=null) => {
-
-  const user = await User.findById(userId);
-
-  if (user.tokens < amount) {
+  if (!result) {
     throw new Error("Not enough tokens");
   }
-
-  user.tokens -= amount;
-  await user.save();
 
   await TokenTransaction.create({
     user: userId,

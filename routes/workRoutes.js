@@ -25,7 +25,7 @@ router.delete("/:id", userAuthMiddleware, deleteWork);
 // Verification route
 router.post(
   "/verify",
-  userAuthMiddleware,
+  
   verifyUploadMiddleware,
   multerErrorMiddleware,
   verifyWorkRegistration

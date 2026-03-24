@@ -149,21 +149,37 @@ export const getSharedWork = asyncHandler(async (req, res) => {
 export const accessByReference = asyncHandler(async (req, res) => {
   const { reference, password } = req.body;
 
-  if (!reference || !password)
+  /* VALIDATION */
+  if (!reference || !password) {
     throw new Error("Reference and password required");
+  }
 
-  const work = await Work.findOne({ displayed_ID: reference });
-  if (!work) throw new Error("Work not found");
+  /* GET WORK + CERTIFICATE */
+  const work = await Work.findOne({ displayed_ID: reference })
+    .populate("id_certificate");
 
+  if (!work) {
+    throw new Error("Work not found");
+  }
+
+  /* GET SHARE */
   const share = await SharedWork.findOne({ id_work: work._id });
-  if (!share) throw new Error("Share not available");
+  if (!share) {
+    throw new Error("Share not available");
+  }
 
+  /* CHECK PASSWORD */
   const isMatch = await bcrypt.compare(password, share.password_hash);
-  if (!isMatch) throw new Error("Invalid password");
+  if (!isMatch) {
+    throw new Error("Invalid password");
+  }
 
-  if (share.end_date < new Date())
+  /* CHECK EXPIRY */
+  if (share.end_date < new Date()) {
     throw new Error("Link expired");
+  }
 
+  /* GENERATE URLS */
   const fileUrl = work.id_file
     ? await generateSignedUrl(work.id_file)
     : null;
@@ -176,12 +192,18 @@ export const accessByReference = asyncHandler(async (req, res) => {
     ? await generateSignedUrl(work.id_ots)
     : null;
 
+  /* RESPONSE (FULL - SAME AS SHARE API) */
   res.json({
     status: "success",
     data: {
       _id: work._id,
       title: work.title,
+      copyright_owner: work.copyright_owner,
+      additional_copyright_owners: work.additional_copyright_owners,
       displayed_ID: work.displayed_ID,
+      registration_date: work.registeration_date,
+      file_name: work.file_name,
+      file_fingerprint: work.file_fingerprint,
       downloadUrl: fileUrl,
       certificateUrl: certUrl,
       otsUrl

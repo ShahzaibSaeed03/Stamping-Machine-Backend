@@ -26,13 +26,11 @@ async function addTokensAtomic(userId, amount, invoiceId) {
     { upsert: true }
   );
 
-  // already exists → skip
   if (result.upsertedCount === 0) {
     console.log("ℹ️ Tokens already added:", invoiceId);
     return;
   }
 
-  // increment ONLY once
   await User.updateOne(
     { _id: userId },
     { $inc: { tokens: amount } }
@@ -61,7 +59,6 @@ async function sendEmailAtomic(user, invoice, payload) {
     { upsert: true }
   );
 
-  // already sent → skip
   if (result.upsertedCount === 0) {
     console.log("ℹ️ Email already sent:", invoice.id);
     return;
@@ -96,8 +93,10 @@ export const stripeWebhook = async (req, res) => {
       sig,
       process.env.STRIPE_WEBHOOK_SECRET
     );
+
     console.log("Stripe webhook:", event.type);
     console.log("EVENT ID:", event.id);
+
   } catch (err) {
     console.error("❌ Signature failed:", err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
@@ -126,7 +125,7 @@ export const stripeWebhook = async (req, res) => {
         break;
       }
 
-      /* ================= MAIN LOGIC ================= */
+      /* ================= PAYMENT SUCCESS ================= */
       case "invoice.payment_succeeded": {
         const invoice = event.data.object;
 
@@ -159,8 +158,27 @@ export const stripeWebhook = async (req, res) => {
           paymentType = "Subscription Renewal";
         else if (invoice.billing_reason === "subscription_update")
           paymentType = "Subscription Update";
-        else if (invoice.lines?.data[0]?.description?.includes("token"))
+        else if (invoice.lines?.data?.[0]?.description?.includes("token"))
           paymentType = "Tokens Purchase";
+
+        /* ===== NEXT BILLING DATE (BEST SOURCE) ===== */
+        let nextBillingDate = null;
+
+        if (invoice.subscription) {
+          const subscription = await stripe.subscriptions.retrieve(invoice.subscription);
+
+          nextBillingDate = subscription.current_period_end
+            ? new Date(subscription.current_period_end * 1000).toLocaleDateString("en-US", {
+                year: "numeric",
+                month: "long",
+                day: "numeric"
+              })
+            : null;
+
+          // ✅ update user status
+          user.subscriptionStatus = "active";
+          await user.save();
+        }
 
         /* ===== EMAIL ===== */
         await sendEmailAtomic(user, invoice, {
@@ -168,8 +186,28 @@ export const stripeWebhook = async (req, res) => {
           amount: invoice.amount_paid / 100,
           currency: invoice.currency,
           type: paymentType,
-          receiptUrl: invoice.hosted_invoice_url
+          receiptUrl: invoice.hosted_invoice_url,
+          nextBillingDate
         });
+        console.log("NEXT BILLING DATE:", nextBillingDate);
+
+        break;
+      }
+
+      /* ================= SUBSCRIPTION CANCEL ================= */
+      case "customer.subscription.deleted": {
+        const subscription = event.data.object;
+
+        const user = await User.findOne({
+          stripeSubscriptionId: subscription.id
+        });
+
+        if (user) {
+          user.subscriptionStatus = "canceled";
+          await user.save();
+
+          console.log("⚠️ Subscription canceled:", user.email);
+        }
 
         break;
       }

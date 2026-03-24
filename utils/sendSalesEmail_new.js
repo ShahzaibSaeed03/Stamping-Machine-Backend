@@ -75,7 +75,7 @@ export const sendSalesEmail = async ({
 
     await sendEmail({
       to: process.env.SALES_EMAIL,
-      subject: `New Payment: ${type} - ${amount} ${currency.toUpperCase()}`,
+      subject: ` Payment: ${type} - ${amount} ${currency.toUpperCase()}`,
       html
     });
 

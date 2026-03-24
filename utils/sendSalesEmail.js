@@ -8,16 +8,20 @@ export const sendSalesEmail = async ({
   type
 }) => {
 
-  const amountText = amount ? `<p><strong>Amount:</strong> ${amount} ${currency.toUpperCase()}</p>` : '';
+  const cleanType = type.replace(/^new\s+/i, "");
+
+  const amountText = amount
+    ? `<p><strong>Amount:</strong> ${amount} ${currency.toUpperCase()}</p>`
+    : '';
 
   const html = `
     <div style="font-family:Arial,sans-serif">
-      <h2>New ${type} Event</h2>
+      <h2>${cleanType} Event</h2>
 
       <p><strong>Customer:</strong> ${name}</p>
       <p><strong>Email:</strong> ${userEmail}</p>
 
-      <p><strong>Event Type:</strong> ${type}</p>
+      <p><strong>Event Type:</strong> ${cleanType}</p>
 
       ${amountText}
 
@@ -27,7 +31,7 @@ export const sendSalesEmail = async ({
 
   await sendEmail({
     to: process.env.SALES_EMAIL,
-    subject: `New ${type} Event`,
+    subject: `Payment: ${cleanType} - ${amount} ${currency.toUpperCase()}`,
     html
   });
 

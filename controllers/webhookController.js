@@ -74,7 +74,7 @@ async function sendEmailAtomic(user, invoice, payload) {
     type: payload.type,
     invoiceId: invoice.id,
     receiptUrl: payload.receiptUrl,
-    nextBillingDate: payload.nextBillingDate || user.nextBillingDate || null
+    nextBillingDate: payload.nextBillingDate
   });
 
   console.log("✅ Emails sent once:", invoice.id);
@@ -160,9 +160,35 @@ export const stripeWebhook = async (req, res) => {
         else if (invoice.lines?.data?.[0]?.description?.includes("token"))
           paymentType = "Tokens Purchase";
 
-        /* ===== TRY GET BILLING DATE (fallback) ===== */
-        let nextBillingDate = user.nextBillingDate || null;
+        /* ===== BILLING DATE (SAVE PROPER DATES) ===== */
+        let nextBillingDate = null;
+        let startDate = null;
 
+        const line = invoice.lines?.data?.[0];
+
+        if (line?.period?.start && line?.period?.end) {
+          startDate = new Date(line.period.start * 1000);
+          nextBillingDate = new Date(line.period.end * 1000);
+        }
+
+        console.log("✅ BILLING DATE FROM INVOICE:", nextBillingDate);
+
+        /* ===== UPDATE USER STATUS + SAVE DATES ===== */
+        user.subscriptionStatus = "active";
+
+        if (startDate) user.subscriptionStart = startDate;
+        if (nextBillingDate) user.subscriptionEnd = nextBillingDate;
+
+        await user.save();
+
+        console.log("✅ SAVED START:", startDate);
+        console.log("✅ SAVED END:", nextBillingDate);
+
+        /* ===== UPDATE USER STATUS ===== */
+        user.subscriptionStatus = "active";
+        await user.save();
+
+        /* ===== EMAIL ===== */
         await sendEmailAtomic(user, invoice, {
           email: user.email,
           amount: invoice.amount_paid / 100,
@@ -171,39 +197,6 @@ export const stripeWebhook = async (req, res) => {
           receiptUrl: invoice.hosted_invoice_url,
           nextBillingDate
         });
-
-        break;
-      }
-
-      /* ================= SUBSCRIPTION UPDATE (MAIN SOURCE) ================= */
-      case "customer.subscription.updated": {
-        const subscription = event.data.object;
-
-        console.log("📦 Subscription updated:", subscription.id);
-
-        const user = await User.findOne({
-          stripeCustomerId: subscription.customer
-        });
-
-        if (!user) {
-          console.log("❌ User not found for subscription");
-          break;
-        }
-
-        const nextBillingDate = subscription.current_period_end
-          ? new Date(subscription.current_period_end * 1000).toLocaleDateString("en-US", {
-              year: "numeric",
-              month: "long",
-              day: "numeric"
-            })
-          : null;
-
-        console.log("✅ FINAL BILLING DATE:", nextBillingDate);
-
-        user.nextBillingDate = nextBillingDate;
-        user.subscriptionStatus = subscription.status;
-
-        await user.save();
 
         break;
       }
@@ -218,7 +211,6 @@ export const stripeWebhook = async (req, res) => {
 
         if (user) {
           user.subscriptionStatus = "canceled";
-          user.nextBillingDate = null;
           await user.save();
 
           console.log("⚠️ Subscription canceled:", user.email);

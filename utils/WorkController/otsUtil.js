@@ -1,95 +1,85 @@
-import { exec } from "child_process";
-import { promisify } from "util";
 import fs from "fs";
 import path from "path";
+import OpenTimestamps from "javascript-opentimestamps";
 
-const execAsync = promisify(exec);
-
-const otsCommand =
-  process.platform === "win32"
-    ? "ots-cli.js.cmd"
-    : process.env.OTS_PATH || "/usr/bin/ots-cli.js";
-
-export const stampWithOTS = async (certificatePath, displayedID) => {
+/**
+ * CREATE TIMESTAMP (STAMP)
+ */
+export const stampWithOTS = async (filePath, displayedID) => {
   try {
+    const fileBuffer = fs.readFileSync(filePath);
 
-    const defaultOTS = `${certificatePath}.ots`;
+    // ✅ Access via default import
+    const detached = OpenTimestamps.DetachedTimestampFile.fromBytes(
+      new OpenTimestamps.Ops.OpSHA256(),
+      fileBuffer
+    );
 
-    // remove existing proof if it exists
-    if (fs.existsSync(defaultOTS)) {
-      fs.unlinkSync(defaultOTS);
-    }
+    await OpenTimestamps.stamp(detached);
 
-    await execAsync(`${otsCommand} stamp "${certificatePath}"`);
+    const dir = path.dirname(filePath);
+    const otsPath = path.join(dir, `Timestamp-${displayedID}.ots`);
 
-    const dir = path.dirname(certificatePath);
-    const customOTS = path.join(dir, `Timestamp-${displayedID}.ots`);
+    fs.writeFileSync(otsPath, Buffer.from(detached.serializeToBytes()));
 
-    fs.renameSync(defaultOTS, customOTS);
-
-    return customOTS;
+    return otsPath;
 
   } catch (err) {
-    console.error("OTS stamp error:", err.stderr || err.stdout || err);
+    console.error("OTS JS stamp error:", err);
     throw new Error("Failed to create timestamp");
   }
 };
 
 
-export const verifyOTS = async (certificatePath, otsPath) => {
+/**
+ * VERIFY TIMESTAMP
+ */
+export const verifyOTS = async (filePath, otsPath) => {
   try {
+    const fileBuffer = fs.readFileSync(filePath);
+    const otsBuffer = fs.readFileSync(otsPath);
 
-    const cmd = `${otsCommand} verify "${otsPath}" -f "${certificatePath}"`;
+    // Load OTS proof
+    const detached = OpenTimestamps.DetachedTimestampFile.deserialize(
+      new Uint8Array(otsBuffer)
+    );
 
-    const { stdout, stderr } = await execAsync(cmd);
+    // Recreate from original file (IMPORTANT)
+    const detachedOriginal = OpenTimestamps.DetachedTimestampFile.fromBytes(
+      new OpenTimestamps.Ops.OpSHA256(),
+      fileBuffer
+    );
 
-    const output = `${stdout}\n${stderr}`;
-
-    if (output.includes("Success! Bitcoin block")) {
-
-      const match = output.match(/Bitcoin block (\d+)/);
-      const block = match ? match[1] : null;
-
+    // Compare message (digest check)
+    if (
+      detachedOriginal.fileDigest().toString() !==
+      detached.fileDigest().toString()
+    ) {
       return {
-        status: "verified",
-        message: "Timestamp verified on Bitcoin blockchain",
-        bitcoinBlock: block,
-        verified: true
+        status: "error",
+        message: "File does not match timestamp"
       };
     }
 
-    if (output.includes("Pending")) {
-      return {
-        status: "pending",
-        message: "Timestamp submitted but not yet confirmed on Bitcoin"
-      };
-    }
+    // Try upgrade (fetch confirmations)
+    await OpenTimestamps.upgrade(detached);
 
     return {
-      status: "error",
-      message: output
+      status: detached.timestamp.isTimestampComplete()
+        ? "verified"
+        : "pending",
+      message: detached.timestamp.isTimestampComplete()
+        ? "Timestamp verified on Bitcoin blockchain"
+        : "Timestamp submitted but not yet confirmed",
+      verified: detached.timestamp.isTimestampComplete()
     };
 
   } catch (err) {
-
-    const output = err.stdout || err.stderr || err.message;
-
-    if (output && output.includes("Success! Bitcoin block")) {
-
-      const match = output.match(/Bitcoin block (\d+)/);
-      const block = match ? match[1] : null;
-
-      return {
-        status: "verified",
-        message: "Timestamp verified on Bitcoin blockchain",
-        bitcoinBlock: block,
-        verified: true
-      };
-    }
+    console.error("OTS JS verify error:", err);
 
     return {
       status: "error",
-      message: output
+      message: err.message
     };
   }
 };

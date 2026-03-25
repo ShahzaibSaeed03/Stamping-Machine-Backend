@@ -216,23 +216,13 @@ const verifyWorkRegistration = asyncHandler(async (req, res) => {
     });
   }
 
-  const work = await Work.findOne({ file_fingerprint: fileFingerprint });
-
-  if (!work) {
-    return res.status(404).json({
-      message: "Certificate not found in database"
-    });
-  }
+  // ✅ NO DATABASE CHECK
 
   const otsResult = await verifyOTS(certificatePath, otsPath);
 
   return res.json({
-    message: "Timestamp verified on Bitcoin network.",
-    otsStatus: otsResult,
-    registeration_date: formatDateForCertificate(work.registeration_date),
-    daysSinceRegistration: Math.floor(
-      (Date.now() - work.registeration_date) / (1000 * 60 * 60 * 24)
-    )
+    message: otsResult.message,
+    otsStatus: otsResult
   });
 
 });

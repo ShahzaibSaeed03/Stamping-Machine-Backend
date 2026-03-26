@@ -5,7 +5,7 @@ import util from "util";
 
 const execAsync = util.promisify(exec);
 
-const OTS_PATH = "/home/shahzaib/.local/bin/ots";
+const OTS_PATH = "ots";
 
 /* ---------------- PATH CONVERT ---------------- */
 const toWSLPath = (p) => {

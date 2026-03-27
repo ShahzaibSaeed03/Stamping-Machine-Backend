@@ -5,12 +5,18 @@ import util from "util";
 
 const execAsync = util.promisify(exec);
 
-const OTS_PATH = "ots";
-
-/* ---------------- PATH CONVERT ---------------- */
+const OTS_PATH = process.platform === "win32"
+  ? "/home/shahzaib/ots-env/bin/ots" // WSL path
+  : "ots"; // Linux server (DigitalOcean)/* ---------------- PATH CONVERT ---------------- */
 const toWSLPath = (p) => {
   const abs = path.resolve(p).replace(/\\/g, "/");
-  return abs.replace(/^([A-Za-z]):/, (_, d) => `/mnt/${d.toLowerCase()}`);
+
+  // only convert on Windows
+  if (process.platform === "win32") {
+    return abs.replace(/^([A-Za-z]):/, (_, d) => `/mnt/${d.toLowerCase()}`);
+  }
+
+  return abs; // Linux/Docker → keep as is
 };
 
 /* ---------------- RUN OTS ---------------- */
@@ -19,8 +25,8 @@ const runOTS = async (args, options = {}) => {
   const isWindows = process.platform === "win32";
 
   const cmd = isWindows
-    ? `wsl -d Ubuntu -- ${OTS_PATH} ${args}`   // local (Windows)
-    : `${OTS_PATH} ${args}`                   // server (Linux)
+    ? `wsl -d Ubuntu -- ${OTS_PATH} ${args}`
+    : `${OTS_PATH} ${args}`;
 
   console.log("[OTS]", cmd);
 
@@ -31,8 +37,14 @@ const runOTS = async (args, options = {}) => {
 };
 
 /* ---------------- MOVE FILE ---------------- */
-const moveWSL = async (from, to) => {
-  const cmd = `wsl -d Ubuntu -- mv "${from}" "${to}"`;
+const moveFile = async (from, to) => {
+
+  const isWindows = process.platform === "win32";
+
+  const cmd = isWindows
+    ? `wsl -d Ubuntu -- mv "${from}" "${to}"`
+    : `mv "${from}" "${to}"`;
+
   return execAsync(cmd);
 };
 
@@ -84,12 +96,12 @@ export const stampWithOTS = async (filePath, displayedID) => {
     // stamp
     await runOTS(`stamp "${wslFile}"`);
 
-    // move file
-    await moveWSL(wslTemp, wslFinal);
+    // move file (FIXED)
+    await moveFile(wslTemp, wslFinal);
 
     // upgrade (optional)
     try {
-      await runOTS(`--no-bitcoin upgrade "${wslFinal}"`);
+      await runOTS(`upgrade "${wslFinal}"`);
     } catch {}
 
     return otsPath;
@@ -116,9 +128,9 @@ export const verifyOTS = async (filePath, otsPath) => {
     let output = "";
 
     try {
-      const res = await runOTS(
-        `--no-bitcoin verify -f "${wslFile}" "${wslOts}"`
-      );
+     const res = await runOTS(
+  `--no-bitcoin verify -f "${wslFile}" "${wslOts}"`
+);
       output = res.stdout + res.stderr;
     } catch (err) {
       output = (err.stdout || "") + (err.stderr || "");
@@ -142,7 +154,7 @@ export const verifyOTS = async (filePath, otsPath) => {
         status: "verified",
         verified: true,
         blockHeight,
-        blockTime, // 🔥 registration date
+        blockTime,
         message: "✅ Timestamp anchored in Bitcoin",
         raw: output,
       };
@@ -154,16 +166,6 @@ export const verifyOTS = async (filePath, otsPath) => {
         status: "pending",
         verified: false,
         message: "⏳ Waiting for Bitcoin confirmation",
-        raw: output,
-      };
-    }
-
-    /* -------- PARTIAL (CACHE) -------- */
-    if (/attestation/i.test(output)) {
-      return {
-        status: "pending",
-        verified: false,
-        message: "⏳ Proof exists, waiting for Bitcoin confirmation",
         raw: output,
       };
     }

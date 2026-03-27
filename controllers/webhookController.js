@@ -125,81 +125,76 @@ export const stripeWebhook = async (req, res) => {
       }
 
       /* ================= PAYMENT SUCCESS ================= */
-      case "invoice.payment_succeeded": {
-        const invoice = event.data.object;
+    case "invoice.payment_succeeded": {
+  const invoice = event.data.object;
 
-        console.log("🔍 Processing invoice:", invoice.id);
+  console.log("🔍 Processing invoice:", invoice.id);
 
-        const user = await User.findOne({
-          stripeCustomerId: invoice.customer
-        });
+  const user = await User.findOne({
+    stripeCustomerId: invoice.customer
+  });
 
-        if (!user) {
-          console.log("❌ User not found");
-          return res.json({ received: true });
-        }
+  if (!user) {
+    console.log("❌ User not found");
+    return res.json({ received: true });
+  }
 
-        /* ===== TOKENS ===== */
-        if (
-          invoice.billing_reason === "subscription_create" ||
-          invoice.billing_reason === "subscription_cycle" ||
-          invoice.billing_reason === "subscription_update"
-        ) {
-          await addTokensAtomic(user._id, 5, invoice.id);
-        }
+  const line = invoice.lines?.data?.[0];
 
-        /* ===== PAYMENT TYPE ===== */
-        let paymentType = "One-time Payment";
+  const isSubscription =
+    invoice.billing_reason === "subscription_create" ||
+    invoice.billing_reason === "subscription_cycle" ||
+    invoice.billing_reason === "subscription_update";
 
-        if (invoice.billing_reason === "subscription_create")
-          paymentType = "New Subscription";
-        else if (invoice.billing_reason === "subscription_cycle")
-          paymentType = "Subscription Renewal";
-        else if (invoice.billing_reason === "subscription_update")
-          paymentType = "Subscription Update";
-        else if (invoice.lines?.data?.[0]?.description?.includes("token"))
-          paymentType = "Tokens Purchase";
+  const isTokenPurchase =
+    invoice.billing_reason === "manual" ||
+    line?.description?.toLowerCase().includes("token");
 
-        /* ===== BILLING DATE (SAVE PROPER DATES) ===== */
-        let nextBillingDate = null;
-        let startDate = null;
+  /* ================= SUBSCRIPTION ================= */
+  if (isSubscription) {
 
-        const line = invoice.lines?.data?.[0];
+    await addTokensAtomic(user._id, 5, invoice.id);
 
-        if (line?.period?.start && line?.period?.end) {
-          startDate = new Date(line.period.start * 1000);
-          nextBillingDate = new Date(line.period.end * 1000);
-        }
+    let startDate = null;
+    let endDate = null;
 
-        console.log("✅ BILLING DATE FROM INVOICE:", nextBillingDate);
+    if (line?.period?.start && line?.period?.end) {
+      startDate = new Date(line.period.start * 1000);
+      endDate = new Date(line.period.end * 1000);
+    }
 
-        /* ===== UPDATE USER STATUS + SAVE DATES ===== */
-        user.subscriptionStatus = "active";
+    user.subscriptionStatus = "active";
 
-        if (startDate) user.subscriptionStart = startDate;
-        if (nextBillingDate) user.subscriptionEnd = nextBillingDate;
+    if (startDate) user.subscriptionStart = startDate;
+    if (endDate) user.subscriptionEnd = endDate;
 
-        await user.save();
+    await user.save();
 
-        console.log("✅ SAVED START:", startDate);
-        console.log("✅ SAVED END:", nextBillingDate);
+    console.log("✅ SUBSCRIPTION UPDATED");
+  }
 
-        /* ===== UPDATE USER STATUS ===== */
-        user.subscriptionStatus = "active";
-        await user.save();
+  /* ================= TOKEN PURCHASE ================= */
+  if (isTokenPurchase) {
 
-        /* ===== EMAIL ===== */
-        await sendEmailAtomic(user, invoice, {
-          email: user.email,
-          amount: invoice.amount_paid / 100,
-          currency: invoice.currency,
-          type: paymentType,
-          receiptUrl: invoice.hosted_invoice_url,
-          nextBillingDate
-        });
+    const tokensPurchased = invoice.amount_paid / 100; // 1$ = 1 token
 
-        break;
-      }
+    await addTokensAtomic(user._id, tokensPurchased, invoice.id);
+
+    console.log("✅ TOKEN PURCHASE:", tokensPurchased);
+  }
+
+  /* ================= EMAIL ================= */
+  await sendEmailAtomic(user, invoice, {
+    email: user.email,
+    amount: invoice.amount_paid / 100,
+    currency: invoice.currency,
+    type: isSubscription ? "Subscription" : "Token Purchase",
+    receiptUrl: invoice.hosted_invoice_url,
+    nextBillingDate: user.subscriptionEnd || null
+  });
+
+  break;
+}
 
       /* ================= SUBSCRIPTION CANCEL ================= */
       case "customer.subscription.deleted": {

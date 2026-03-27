@@ -45,6 +45,8 @@ const moveFile = async (from, to) => {
     ? `wsl -d Ubuntu -- mv "${from}" "${to}"`
     : `mv "${from}" "${to}"`;
 
+  console.log("[MOVE]", cmd);
+
   return execAsync(cmd);
 };
 

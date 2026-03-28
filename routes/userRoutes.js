@@ -13,6 +13,5 @@ router.put("/profile", userAuthMiddleware, updateProfile);
 router.get("/profile", userAuthMiddleware, getProfile);
 router.put("/change-password", userAuthMiddleware, changePassword);
 router.put("/change-email", userAuthMiddleware, requestEmailChange);
-router.put("/verify-email", verifyEmailChange);
-
+router.put("/verify-email", userAuthMiddleware, verifyEmailChange);
 export default router;

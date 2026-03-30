@@ -5,21 +5,28 @@ import { s3Client } from "../config/s3Client.js";
 export const generateSignedUrl = async (
   keyOrUrl,
   disposition = "attachment",
-  contentType = null
+  contentType = null,
+  fileName = null   // ✅ ADD THIS
 ) => {
 
   let key = keyOrUrl;
 
-  // If full URL is stored, extract key
+  // Extract key if full URL
   if (key.startsWith("https://")) {
     const url = new URL(key);
     key = decodeURIComponent(url.pathname.substring(1));
   }
 
+  // ✅ IMPORTANT LINE
+  const finalFileName = fileName || key.split("/").pop();
+
   const command = new GetObjectCommand({
     Bucket: process.env.DO_SPACE_NAME,
     Key: key,
-    ResponseContentDisposition: disposition,
+
+    // ✅ MAIN FIX HERE
+    ResponseContentDisposition: `${disposition}; filename="${finalFileName}"`,
+
     ...(contentType && { ResponseContentType: contentType })
   });
 

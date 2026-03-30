@@ -171,10 +171,23 @@ const uploadWork = asyncHandler(async (req, res) => {
     console.error("Email failed:", err.message);
   }
   /* SIGNED URL */
-  const certificateUrl = await generateSignedUrl(s3Links.certUrl);
-  const signedFileUrl = await generateSignedUrl(s3Links.fileUrl);
-  const otsUrl = await generateSignedUrl(s3Links.otsUrl);
-
+  const certificateUrl = await generateSignedUrl(
+    s3Links.certUrl,
+    "attachment",
+    "application/pdf",
+    `Certificate-${displayedID}.pdf`
+  );
+  const signedFileUrl = await generateSignedUrl(
+    s3Links.fileUrl,
+    "attachment",
+    null,
+    file.originalname
+  ); const otsUrl = await generateSignedUrl(
+    s3Links.otsUrl,
+    "attachment",
+    null,
+    `Timestamp-${displayedID}.ots`
+  );
   res.status(201).json({
     status: "success",
     message: "Work uploaded and registered successfully.",

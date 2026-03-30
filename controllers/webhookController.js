@@ -3,6 +3,8 @@ import User from "../models/userModel.js";
 import TokenTransaction from "../models/tokenTransactionModel.js";
 import { sendPaymentEmail } from "../utils/WorkController/sendPaymentEmail.js";
 import { sendSalesEmail } from "../utils/sendSalesEmail.js";
+import Counter from "../models/counterModel.js";
+import bcrypt from "bcryptjs";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -106,95 +108,190 @@ export const stripeWebhook = async (req, res) => {
 
       /* ================= CHECKOUT ================= */
       case "checkout.session.completed": {
+
         const session = event.data.object;
 
-        if (session.mode === "subscription") {
-          const user = await User.findById(session.metadata?.userId);
+        console.log("🔥 SESSION MODE:", session.mode);
 
-          if (user) {
-            user.stripeCustomerId ||= session.customer;
-            user.stripeSubscriptionId = session.subscription;
-            user.subscriptionStatus = "incomplete";
-            await user.save();
-
-            console.log("✅ Subscription initialized");
-          }
+        if (!session.metadata?.formData) {
+          console.log("❌ No metadata");
+          break;
         }
+
+        const formData = JSON.parse(session.metadata.formData);
+
+        let user = await User.findOne({ email: formData.email });
+
+        if (!user) {
+
+          const counter = await Counter.findOneAndUpdate(
+            { _id: "userSeq" },
+            { $inc: { seq: 1 } },
+            { new: true, upsert: true }
+          );
+
+          const hashedPassword = await bcrypt.hash(formData.password, 10);
+
+          user = await User.create({
+            firstName: formData.firstName,
+            lastName: formData.lastName,
+            email: formData.email,
+            password: hashedPassword,
+            companyName: formData.companyName,
+            ownerName: formData.ownerName,
+            country: formData.country,
+            state: formData.state,
+            userSeq: counter.seq,
+            subscriptionStatus: "inactive",
+            tokens: 0,
+            personalAddress: {
+              address1: formData.addressLine1,
+              address2: formData.addressLine2,
+              zip: formData.zip,
+              city: formData.city,
+              state: formData.state,
+              country: formData.country,
+              phone: formData.phone,
+              profession: formData.profession,
+              refSource: formData.refSource
+            },
+            stripeCustomerId: session.customer
+          });
+
+          console.log("✅ USER CREATED FROM CHECKOUT");
+        }
+
+        // ALWAYS LINK
+        user.stripeCustomerId ||= session.customer;
+        user.stripeSubscriptionId = session.subscription;
+
+        await user.save();
 
         break;
       }
-
       /* ================= PAYMENT SUCCESS ================= */
-    case "invoice.payment_succeeded": {
-  const invoice = event.data.object;
+      case "invoice.payment_succeeded": {
+        const invoice = event.data.object;
 
-  console.log("🔍 Processing invoice:", invoice.id);
+        console.log("🔍 Processing invoice:", invoice.id);
 
-  const user = await User.findOne({
-    stripeCustomerId: invoice.customer
-  });
+        let user = await User.findOne({
+          $or: [
+            { stripeCustomerId: invoice.customer },
+          ]
+        });
+        if (!user) {
 
-  if (!user) {
-    console.log("❌ User not found");
-    return res.json({ received: true });
-  }
+          console.log("⚠️ User not found → creating from metadata");
 
-  const line = invoice.lines?.data?.[0];
+          // 🔥 GET SESSION FROM STRIPE
+          const sessions = await stripe.checkout.sessions.list({
+            customer: invoice.customer,
+            limit: 1
+          });
 
-  const isSubscription =
-    invoice.billing_reason === "subscription_create" ||
-    invoice.billing_reason === "subscription_cycle" ||
-    invoice.billing_reason === "subscription_update";
+          const session = sessions.data[0];
 
-  const isTokenPurchase =
-    invoice.billing_reason === "manual" ||
-    line?.description?.toLowerCase().includes("token");
+          if (!session?.metadata?.formData) {
+            console.log("❌ No metadata found");
+            return res.json({ received: true });
+          }
 
-  /* ================= SUBSCRIPTION ================= */
-  if (isSubscription) {
+          const formData = JSON.parse(session.metadata.formData);
 
-    await addTokensAtomic(user._id, 5, invoice.id);
+          const counter = await Counter.findOneAndUpdate(
+            { _id: "userSeq" },
+            { $inc: { seq: 1 } },
+            { new: true, upsert: true }
+          );
 
-    let startDate = null;
-    let endDate = null;
+          const hashedPassword = await bcrypt.hash(formData.password, 10);
 
-    if (line?.period?.start && line?.period?.end) {
-      startDate = new Date(line.period.start * 1000);
-      endDate = new Date(line.period.end * 1000);
-    }
+          user = await User.create({
+            firstName: formData.firstName,
+            lastName: formData.lastName,
+            email: formData.email,
+            password: hashedPassword,
+            companyName: formData.companyName,
+            ownerName: formData.ownerName,
+            country: formData.country,
+            state: formData.state,
+            userSeq: counter.seq,
+            subscriptionStatus: "inactive",
+            tokens: 0,
+            personalAddress: {
+              address1: formData.addressLine1,
+              address2: formData.addressLine2,
+              zip: formData.zip,
+              city: formData.city,
+              state: formData.state,
+              country: formData.country,
+              phone: formData.phone,
+              profession: formData.profession,
+              refSource: formData.refSource
+            },
+            stripeCustomerId: invoice.customer
+          });
 
-    user.subscriptionStatus = "active";
+          console.log("✅ USER CREATED FROM INVOICE");
+        }
 
-    if (startDate) user.subscriptionStart = startDate;
-    if (endDate) user.subscriptionEnd = endDate;
+        const line = invoice.lines?.data?.[0];
 
-    await user.save();
+        const isSubscription =
+          invoice.billing_reason === "subscription_create" ||
+          invoice.billing_reason === "subscription_cycle" ||
+          invoice.billing_reason === "subscription_update";
 
-    console.log("✅ SUBSCRIPTION UPDATED");
-  }
+        const isTokenPurchase =
+          invoice.billing_reason === "manual" ||
+          line?.description?.toLowerCase().includes("token");
 
-  /* ================= TOKEN PURCHASE ================= */
-  if (isTokenPurchase) {
+        /* ================= SUBSCRIPTION ================= */
+        if (isSubscription) {
 
-    const tokensPurchased = invoice.amount_paid / 100; // 1$ = 1 token
+          await addTokensAtomic(user._id, 5, invoice.id);
 
-    await addTokensAtomic(user._id, tokensPurchased, invoice.id);
+          let startDate = null;
+          let endDate = null;
 
-    console.log("✅ TOKEN PURCHASE:", tokensPurchased);
-  }
+          if (line?.period?.start && line?.period?.end) {
+            startDate = new Date(line.period.start * 1000);
+            endDate = new Date(line.period.end * 1000);
+          }
 
-  /* ================= EMAIL ================= */
-  await sendEmailAtomic(user, invoice, {
-    email: user.email,
-    amount: invoice.amount_paid / 100,
-    currency: invoice.currency,
-    type: isSubscription ? "Subscription" : "Token Purchase",
-    receiptUrl: invoice.hosted_invoice_url,
-    nextBillingDate: user.subscriptionEnd || null
-  });
+          user.subscriptionStatus = "active";
 
-  break;
-}
+          if (startDate) user.subscriptionStart = startDate;
+          if (endDate) user.subscriptionEnd = endDate;
+
+          await user.save();
+
+          console.log("✅ SUBSCRIPTION UPDATED");
+        }
+
+        /* ================= TOKEN PURCHASE ================= */
+        if (isTokenPurchase) {
+
+          const tokensPurchased = invoice.amount_paid / 100; // 1$ = 1 token
+
+          await addTokensAtomic(user._id, tokensPurchased, invoice.id);
+
+          console.log("✅ TOKEN PURCHASE:", tokensPurchased);
+        }
+
+        /* ================= EMAIL ================= */
+        await sendEmailAtomic(user, invoice, {
+          email: user.email,
+          amount: invoice.amount_paid / 100,
+          currency: invoice.currency,
+          type: isSubscription ? "Subscription" : "Token Purchase",
+          receiptUrl: invoice.hosted_invoice_url,
+          nextBillingDate: user.subscriptionEnd || null
+        });
+
+        break;
+      }
 
       /* ================= SUBSCRIPTION CANCEL ================= */
       case "customer.subscription.deleted": {

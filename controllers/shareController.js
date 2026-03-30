@@ -46,36 +46,61 @@ export const setSharePassword = asyncHandler(async (req, res) => {
   const shareUrl = `${process.env.FRONTEND_URL}shared/${share.sha256_string}`;
 
   /* EMAIL */
-  try {
-    await sendEmail({
-      to: user.email,
-      subject: `Your password for your work number: ${work.displayed_ID}`,
-      html: `
-      <div style="font-family:Arial;line-height:1.6">
-        <h2>Work Access Details</h2>
+try {
+  await sendEmail({
+    to: user.email,
+    subject: `Your password for your work number: ${work.displayed_ID}`,
+    html: `
+      <div style="font-family: Arial; line-height:1.6; color:#000;">
+        
+        <p>This email is a reminder:</p>
 
-        <p>Password for work <b>${work.displayed_ID}</b>:</p>
-        <p><b>${password}</b></p>
+        <p>
+          The password for your work number <b>${work.displayed_ID}</b> is 
+          <b>${password}</b>.
+        </p>
 
-        <p><b>Direct access (no password):</b></p>
-        <a href="${shareUrl}">View Work</a>
+        <p>
+          To download the corresponding work, please follow the following instructions:
+        </p>
 
-        <hr/>
-
-        <p><b>Access using reference:</b></p>
         <ol>
-          <li>${process.env.FRONTEND_URL}view-register-work</li>
-          <li>Reference: ${work.displayed_ID}</li>
-          <li>Password:  ${password}</li>
+          <li>
+            Go to the "Access a registered work" page:<br/>
+            <a href="https://www.mycopyrightally.com/access-registered-work">
+              www.mycopyrightally.com/access-registered-work
+            </a>
+          </li>
+          <li>
+            Type the "work reference number" and the password that are in this email.
+          </li>
+          <li>
+            The Certificate of this work will appear on the screen.<br/>
+            And you will be able to download the work.
+          </li>
         </ol>
 
-        <p>Expires in 7 days</p>
+      <p>
+  You can give these credentials to a third party, but 
+  <span style="color:red;">they will be able to download the corresponding work.</span>
+</p>
+
+        <br/>
+
+        <p>
+          Sincerely,<br/>
+          MyCopyrightAlly Team<br/>
+          <a href="https://www.mycopyrightally.com">
+            www.MyCopyrightAlly.com
+          </a>
+        </p>
+
       </div>
-      `
-    });
-  } catch (err) {
-    console.log("Email failed:", err.message);
-  }
+    `
+  });
+} catch (error) {
+  console.error(error);
+}
 
   res.json({
     message: "Password set",

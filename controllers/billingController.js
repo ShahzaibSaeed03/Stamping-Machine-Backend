@@ -101,9 +101,15 @@ export const createCheckoutSession = asyncHandler(async (req, res) => {
     ],
 
     // ✅ ONLY THIS (IMPORTANT)
-    metadata: {
-      formData: JSON.stringify(formData)
-    },
+   metadata: {
+  formData: JSON.stringify(formData)
+},
+
+subscription_data: {
+  metadata: {
+    formData: JSON.stringify(formData)
+  }
+},
 
     return_url: `${process.env.CLIENT_URL}/billing/success?session_id={CHECKOUT_SESSION_ID}`
 

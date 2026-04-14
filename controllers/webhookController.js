@@ -4,6 +4,7 @@ import TokenTransaction from "../models/tokenTransactionModel.js";
 import WebhookEvent from "../models/webhookEventModel.js";
 import { sendPaymentEmail } from "../utils/WorkController/sendPaymentEmail.js";
 import { sendSalesEmail } from "../utils/sendSalesEmail.js";
+import bcrypt from "bcryptjs";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -115,9 +116,55 @@ export const stripeWebhook = async (req, res) => {
         });
 
         /* ================= FIND USER ================= */
-        let user = await User.findOne({
-          stripeCustomerId: fullInvoice.customer
-        });
+   let user = await User.findOne({
+  stripeCustomerId: fullInvoice.customer
+});
+
+if (!user) {
+  console.log("⚠️ User not found → getting from subscription");
+
+  const subscription = await stripe.subscriptions.retrieve(
+    fullInvoice.subscription
+  );
+
+  let formData = null;
+
+  if (subscription.metadata?.formData) {
+    try {
+      formData = JSON.parse(subscription.metadata.formData);
+    } catch (e) {
+      console.log("❌ Metadata parse error");
+    }
+  }
+
+  if (formData) {
+    console.log("✅ Creating user from metadata");
+
+    const hashedPassword = await bcrypt.hash(formData.password, 10);
+
+    user = await User.create({
+      firstName: formData.firstName,
+      lastName: formData.lastName,
+      email: formData.email,
+      password: hashedPassword,
+      companyName: formData.companyName,
+      country: formData.country,
+      stripeCustomerId: fullInvoice.customer,
+      subscriptionStatus: "inactive",
+      tokens: 0
+    });
+
+  } else {
+    console.log("⚠️ No metadata → fallback user");
+
+    user = await User.create({
+      email: fullInvoice.customer_email || `temp_${Date.now()}@noemail.com`,
+      stripeCustomerId: fullInvoice.customer,
+      subscriptionStatus: "inactive",
+      tokens: 0
+    });
+  }
+}
 
         /* ✅ Fallback user (never fail) */
         if (!user) {

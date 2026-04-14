@@ -1,21 +1,26 @@
 import Stripe from "stripe";
 import User from "../models/userModel.js";
 import TokenTransaction from "../models/tokenTransactionModel.js";
+import WebhookEvent from "../models/webhookEventModel.js";
 import { sendPaymentEmail } from "../utils/WorkController/sendPaymentEmail.js";
 import { sendSalesEmail } from "../utils/sendSalesEmail.js";
-import Counter from "../models/counterModel.js";
-import bcrypt from "bcryptjs";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-/* ================= ATOMIC TOKEN ADD ================= */
+/* ================= IDPOTENCY (CRITICAL) ================= */
+async function isDuplicateEvent(eventId) {
+  try {
+    await WebhookEvent.create({ eventId });
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+/* ================= ATOMIC TOKEN ================= */
 async function addTokensAtomic(userId, amount, invoiceId) {
   const result = await TokenTransaction.updateOne(
-    {
-      user: userId,
-      invoiceId,
-      type: "bonus"
-    },
+    { user: userId, invoiceId, type: "bonus" },
     {
       $setOnInsert: {
         user: userId,
@@ -28,49 +33,37 @@ async function addTokensAtomic(userId, amount, invoiceId) {
     { upsert: true }
   );
 
-  if (result.upsertedCount === 0) {
-    console.log("ℹ️ Tokens already added:", invoiceId);
-    return;
-  }
+  if (result.upsertedCount === 0) return;
 
   await User.updateOne(
     { _id: userId },
     { $inc: { tokens: amount } }
   );
 
-  console.log("✅ Tokens added:", amount, invoiceId);
+  console.log("✅ Tokens added:", amount);
 }
 
 /* ================= ATOMIC EMAIL ================= */
 async function sendEmailAtomic(user, invoice, payload) {
   const result = await TokenTransaction.updateOne(
-    {
-      user: user._id,
-      invoiceId: invoice.id,
-      type: "email"
-    },
+    { user: user._id, invoiceId: invoice.id, type: "email" },
     {
       $setOnInsert: {
         user: user._id,
-        amount: 0,
         type: "email",
-        note: "email sent",
         invoiceId: invoice.id
       }
     },
     { upsert: true }
   );
 
-  if (result.upsertedCount === 0) {
-    console.log("ℹ️ Email already sent:", invoice.id);
-    return;
-  }
+  if (result.upsertedCount === 0) return;
 
   await sendPaymentEmail(payload);
 
   await sendSalesEmail({
     userEmail: user.email,
-    name: `${user.firstName} ${user.lastName}`,
+    name: `${user.firstName || ""} ${user.lastName || ""}`,
     amount: payload.amount,
     currency: payload.currency,
     type: payload.type,
@@ -79,11 +72,10 @@ async function sendEmailAtomic(user, invoice, payload) {
     nextBillingDate: payload.nextBillingDate
   });
 
-  console.log("✅ Emails sent once:", invoice.id);
+  console.log("✅ Email sent");
 }
 
-/* ================= WEBHOOK ================= */
-
+/* ================= MAIN WEBHOOK ================= */
 export const stripeWebhook = async (req, res) => {
   let event;
   const sig = req.headers["stripe-signature"];
@@ -94,163 +86,67 @@ export const stripeWebhook = async (req, res) => {
       sig,
       process.env.STRIPE_WEBHOOK_SECRET
     );
-
-    console.log("Stripe webhook:", event.type);
-    console.log("EVENT ID:", event.id);
-
   } catch (err) {
-    console.error("❌ Signature failed:", err.message);
+    console.error("❌ Signature error:", err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
+
+  /* ✅ Prevent duplicate execution */
+  if (await isDuplicateEvent(event.id)) {
+    console.log("⚠️ Duplicate skipped:", event.id);
+    return res.json({ received: true });
+  }
+
+  /* ✅ Respond immediately (avoid retry issues) */
+  res.json({ received: true });
 
   try {
     switch (event.type) {
 
-      /* ================= CHECKOUT ================= */
-      case "checkout.session.completed": {
-
-        const session = event.data.object;
-
-        console.log("🔥 SESSION MODE:", session.mode);
-
-        if (!session.metadata?.formData) {
-          console.log("❌ No metadata");
-          break;
-        }
-
-        const formData = JSON.parse(session.metadata.formData);
-
-        let user = await User.findOne({ email: formData.email });
-
-        if (!user) {
-
-          const counter = await Counter.findOneAndUpdate(
-            { _id: "userSeq" },
-            { $inc: { seq: 1 } },
-            { new: true, upsert: true }
-          );
-
-          const hashedPassword = await bcrypt.hash(formData.password, 10);
-
-          user = await User.create({
-            firstName: formData.firstName,
-            lastName: formData.lastName,
-            email: formData.email,
-            password: hashedPassword,
-            companyName: formData.companyName,
-            ownerName: formData.ownerName,
-            country: formData.country,
-            state: formData.state,
-            userSeq: counter.seq,
-            subscriptionStatus: "inactive",
-            tokens: 0,
-            personalAddress: {
-              address1: formData.addressLine1,
-              address2: formData.addressLine2,
-              zip: formData.zip,
-              city: formData.city,
-              state: formData.state,
-              country: formData.country,
-              phone: formData.phone,
-              profession: formData.profession,
-              refSource: formData.refSource
-            },
-            stripeCustomerId: session.customer
-          });
-
-          console.log("✅ USER CREATED FROM CHECKOUT");
-        }
-
-        // ALWAYS LINK
-        user.stripeCustomerId ||= session.customer;
-        user.stripeSubscriptionId = session.subscription;
-
-        await user.save();
-
-        break;
-      }
       /* ================= PAYMENT SUCCESS ================= */
       case "invoice.payment_succeeded": {
         const invoice = event.data.object;
 
-        console.log("🔍 Processing invoice:", invoice.id);
+        console.log("🔥 Processing invoice:", invoice.id);
 
-        let user = await User.findOne({
-          $or: [
-            { stripeCustomerId: invoice.customer },
-          ]
+        /* ✅ Always get latest invoice with full data */
+        const fullInvoice = await stripe.invoices.retrieve(invoice.id, {
+          expand: ["subscription"]
         });
+
+        /* ================= FIND USER ================= */
+        let user = await User.findOne({
+          stripeCustomerId: fullInvoice.customer
+        });
+
+        /* ✅ Fallback user (never fail) */
         if (!user) {
-
-          console.log("⚠️ User not found → creating from metadata");
-
-          // 🔥 GET SESSION FROM STRIPE
-          const sessions = await stripe.checkout.sessions.list({
-            customer: invoice.customer,
-            limit: 1
-          });
-
-          const session = sessions.data[0];
-
-          if (!session?.metadata?.formData) {
-            console.log("❌ No metadata found");
-            return res.json({ received: true });
-          }
-
-          const formData = JSON.parse(session.metadata.formData);
-
-          const counter = await Counter.findOneAndUpdate(
-            { _id: "userSeq" },
-            { $inc: { seq: 1 } },
-            { new: true, upsert: true }
-          );
-
-          const hashedPassword = await bcrypt.hash(formData.password, 10);
+          console.log("⚠️ Creating fallback user");
 
           user = await User.create({
-            firstName: formData.firstName,
-            lastName: formData.lastName,
-            email: formData.email,
-            password: hashedPassword,
-            companyName: formData.companyName,
-            ownerName: formData.ownerName,
-            country: formData.country,
-            state: formData.state,
-            userSeq: counter.seq,
+            email: fullInvoice.customer_email || `temp_${Date.now()}@noemail.com`,
+            stripeCustomerId: fullInvoice.customer,
             subscriptionStatus: "inactive",
-            tokens: 0,
-            personalAddress: {
-              address1: formData.addressLine1,
-              address2: formData.addressLine2,
-              zip: formData.zip,
-              city: formData.city,
-              state: formData.state,
-              country: formData.country,
-              phone: formData.phone,
-              profession: formData.profession,
-              refSource: formData.refSource
-            },
-            stripeCustomerId: invoice.customer
+            tokens: 0
           });
-
-          console.log("✅ USER CREATED FROM INVOICE");
         }
 
-        const line = invoice.lines?.data?.[0];
-
+        /* ================= DETECT TYPE ================= */
         const isSubscription =
-          invoice.billing_reason === "subscription_create" ||
-          invoice.billing_reason === "subscription_cycle" ||
-          invoice.billing_reason === "subscription_update";
+          fullInvoice.billing_reason === "subscription_create" ||
+          fullInvoice.billing_reason === "subscription_cycle" ||
+          fullInvoice.billing_reason === "subscription_update";
+
+        const line = fullInvoice.lines?.data?.[0];
 
         const isTokenPurchase =
-          invoice.billing_reason === "manual" ||
+          fullInvoice.billing_reason === "manual" ||
           line?.description?.toLowerCase().includes("token");
 
         /* ================= SUBSCRIPTION ================= */
         if (isSubscription) {
 
-          await addTokensAtomic(user._id, 5, invoice.id);
+          await addTokensAtomic(user._id, 5, fullInvoice.id);
 
           let startDate = null;
           let endDate = null;
@@ -260,40 +156,43 @@ export const stripeWebhook = async (req, res) => {
             endDate = new Date(line.period.end * 1000);
           }
 
-          user.subscriptionStatus = "active";
+          if (user.subscriptionStatus !== "active") {
+            user.subscriptionStatus = "active";
+          }
 
           if (startDate) user.subscriptionStart = startDate;
           if (endDate) user.subscriptionEnd = endDate;
 
+          user.stripeSubscriptionId = fullInvoice.subscription;
+
           await user.save();
 
-          console.log("✅ SUBSCRIPTION UPDATED");
+          console.log("✅ Subscription activated");
         }
 
         /* ================= TOKEN PURCHASE ================= */
         if (isTokenPurchase) {
+          const tokens = fullInvoice.amount_paid / 100;
 
-          const tokensPurchased = invoice.amount_paid / 100; // 1$ = 1 token
+          await addTokensAtomic(user._id, tokens, fullInvoice.id);
 
-          await addTokensAtomic(user._id, tokensPurchased, invoice.id);
-
-          console.log("✅ TOKEN PURCHASE:", tokensPurchased);
+          console.log("✅ Tokens purchased:", tokens);
         }
 
         /* ================= EMAIL ================= */
-        await sendEmailAtomic(user, invoice, {
+        await sendEmailAtomic(user, fullInvoice, {
           email: user.email,
-          amount: invoice.amount_paid / 100,
-          currency: invoice.currency,
+          amount: fullInvoice.amount_paid / 100,
+          currency: fullInvoice.currency,
           type: isSubscription ? "Subscription" : "Token Purchase",
-          receiptUrl: invoice.hosted_invoice_url,
+          receiptUrl: fullInvoice.hosted_invoice_url,
           nextBillingDate: user.subscriptionEnd || null
         });
 
         break;
       }
 
-      /* ================= SUBSCRIPTION CANCEL ================= */
+      /* ================= CANCEL ================= */
       case "customer.subscription.deleted": {
         const subscription = event.data.object;
 
@@ -304,23 +203,16 @@ export const stripeWebhook = async (req, res) => {
         if (user) {
           user.subscriptionStatus = "canceled";
           await user.save();
-
-          console.log("⚠️ Subscription canceled:", user.email);
         }
 
         break;
       }
 
-      /* ================= IGNORE ================= */
       default:
         console.log("Ignored:", event.type);
-        return res.json({ received: true });
     }
 
-    return res.json({ received: true });
-
   } catch (err) {
-    console.error("❌ Webhook error:", err);
-    return res.status(500).send("Webhook failed");
+    console.error("❌ Webhook processing error:", err);
   }
 };

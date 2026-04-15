@@ -140,6 +140,16 @@ export const loginUser = asyncHandler(async (req, res) => {
     throw new Error("Invalid credentials");
   }
 
+  /* ================= PAYMENT CHECK ================= */
+  if (user.subscriptionStatus !== "active") {
+    return res.status(403).json({
+      message: "Payment required. Please complete your subscription.",
+      subscriptionStatus: user.subscriptionStatus,
+      token: generateToken(user) // optional: allow frontend to continue payment
+    });
+  }
+
+  /* ================= SUCCESS ================= */
   res.status(200).json({
     id: user._id,
     email: user.email,

@@ -17,7 +17,6 @@ export const registerUser = asyncHandler(async (req, res) => {
     ownerName,
     country,
     state,
-
     addressLine1,
     addressLine2,
     zip,
@@ -25,8 +24,6 @@ export const registerUser = asyncHandler(async (req, res) => {
     phone,
     profession,
     refSource,
-
-   
   } = req.body;
 
   if (!firstName || !lastName || !email || !password) {
@@ -34,40 +31,28 @@ export const registerUser = asyncHandler(async (req, res) => {
     throw new Error("Required fields missing");
   }
 
-  const exists = await User.findOne({ email });
-
-  if (exists) {
-    res.status(400);
-    throw new Error("User already exists");
-  }
-
-  /* Generate sequential user id */
-
-  const counter = await Counter.findOneAndUpdate(
-    { _id: "userSeq" },
-    { $inc: { seq: 1 } },
-    { new: true, upsert: true }
-  );
+  let user = await User.findOne({ email });
 
   const hashedPassword = await bcrypt.hash(password, 10);
 
-  const user = await User.create({
+  /* ================= EXISTING USER ================= */
+  if (user) {
 
-    firstName,
-    lastName,
-    email,
-    password: hashedPassword,
-    companyName,
-    ownerName,
-    country,
-    state,
+    if (user.subscriptionStatus === "active") {
+      res.status(400);
+      throw new Error("Account already active. Please login.");
+    }
 
-    userSeq: counter.seq,
+    // update user
+    user.firstName = firstName;
+    user.lastName = lastName;
+    user.password = hashedPassword;
+    user.companyName = companyName;
+    user.ownerName = ownerName;
+    user.country = country;
+    user.state = state;
 
-    subscriptionStatus: "inactive",
-    tokens: 0,
-
-    personalAddress: {
+    user.personalAddress = {
       address1: addressLine1 || "",
       address2: addressLine2 || "",
       zip: zip || "",
@@ -77,18 +62,54 @@ export const registerUser = asyncHandler(async (req, res) => {
       phone: phone || "",
       profession: profession || "",
       refSource: refSource || ""
-    },
+    };
 
+    await user.save();
 
-  });
+  } else {
 
-  res.status(201).json({
+    /* ================= NEW USER ================= */
+    const counter = await Counter.findOneAndUpdate(
+      { _id: "userSeq" },
+      { $inc: { seq: 1 } },
+      { new: true, upsert: true }
+    );
+
+    user = await User.create({
+      firstName,
+      lastName,
+      email,
+      password: hashedPassword,
+      companyName,
+      ownerName,
+      country,
+      state,
+      userSeq: counter.seq,
+      subscriptionStatus: "inactive",
+      tokens: 0,
+      personalAddress: {
+        address1: addressLine1 || "",
+        address2: addressLine2 || "",
+        zip: zip || "",
+        city: city || "",
+        state: state || "",
+        country: country || "",
+        phone: phone || "",
+        profession: profession || "",
+        refSource: refSource || ""
+      }
+    });
+  }
+
+  /* ================= SAME RESPONSE ================= */
+  res.status(200).json({
     id: user._id,
     email: user.email,
     userSeq: user.userSeq,
     subscriptionStatus: user.subscriptionStatus,
     tokens: user.tokens,
-    token: generateToken(user)
+    token: generateToken(user),
+    message: "Account saved. Proceed to payment." // ✅ SAME MESSAGE
   });
 
 });

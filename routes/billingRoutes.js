@@ -19,8 +19,11 @@ router.get("/subscription", userAuthMiddleware, getSubscriptionInfo);
 
 router.put("/cancel", userAuthMiddleware, cancelSubscription);
 
-router.post("/subscription-checkout",  createCheckoutSession);
-
+router.post(
+  "/subscription-checkout",
+  userAuthMiddleware,   // ✅ FIX
+  createCheckoutSession
+);
 router.get("/checkout-success", checkoutSuccess);
 
 router.get("/invoices", userAuthMiddleware, getReceipts);

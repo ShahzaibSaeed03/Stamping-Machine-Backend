@@ -42,9 +42,6 @@ export const getSubscriptionInfo = asyncHandler(async (req, res) => {
 
     } catch (error) {
       console.error("Error syncing with Stripe:", error.message);
-      if (typeof user.autoRenew !== "boolean") {
-        user.autoRenew = true; // default active
-      }
     }
   }
 
@@ -59,9 +56,8 @@ export const getSubscriptionInfo = asyncHandler(async (req, res) => {
     subscriptionStatus: isActive ? "active" : user.subscriptionStatus,
     subscriptionStart: user.subscriptionStart,
     nextBillingDate: user.subscriptionEnd,
-    autoRenew: Boolean(user.autoRenew),
+    autoRenew: user.autoRenew,
     remainingTokens: user.tokens,
-
     isActive,
     daysRemaining: user.subscriptionEnd
       ? Math.max(0, Math.ceil((user.subscriptionEnd - now) / (1000 * 60 * 60 * 24)))
@@ -75,45 +71,72 @@ export const getSubscriptionInfo = asyncHandler(async (req, res) => {
 
 export const createCheckoutSession = asyncHandler(async (req, res) => {
 
-  const { formData } = req.body;
-
-  if (!formData) {
-    throw new Error("Form data missing");
+  if (!process.env.STRIPE_SECRET_KEY) {
+    throw new Error("Stripe not configured");
   }
 
-  const session = await stripe.checkout.sessions.create({
+  const user = await User.findById(req.user._id);
+  if (!user) throw new Error("User not found");
 
-    mode: "subscription",
-    ui_mode: "embedded",
-    customer_email: formData.email,
+  let customerId = user.stripeCustomerId;
 
-    redirect_on_completion: "always",
+  /* create customer if not exists */
 
-    automatic_tax: { enabled: true },
+  if (!customerId) {
 
-    billing_address_collection: "required",
+    const customer = await stripe.customers.create({
+      email: user.email,
+      name: `${user.firstName || ""} ${user.lastName || ""}`.trim()
+    });
 
-    line_items: [
-      {
-        price: process.env.STRIPE_PRICE_ID,
-        quantity: 1
-      }
-    ],
+    customerId = customer.id;
 
-    // ✅ ONLY THIS (IMPORTANT)
-   metadata: {
-  formData: JSON.stringify(formData)
-},
+    await User.updateOne(
+      { _id: user._id },
+      { stripeCustomerId: customerId }
+    );
+  }
 
-subscription_data: {
+  /* create subscription checkout */
+
+const session = await stripe.checkout.sessions.create({
+
+  mode: "subscription",
+  ui_mode: "embedded",
+
+  redirect_on_completion: "always", // ✅ FIX
+
+  customer: customerId,
+
+  automatic_tax: { enabled: true },
+
+  billing_address_collection: "required",
+  customer_update: { address: "auto" },
+
+  line_items: [
+    {
+      price: process.env.STRIPE_PRICE_ID,
+      quantity: 1
+    }
+  ],
+
+  saved_payment_method_options: {
+    payment_method_save: "enabled"
+  },
+
   metadata: {
-    formData: JSON.stringify(formData)
-  }
-},
+    userId: user._id.toString()
+  },
 
-    return_url: `${process.env.CLIENT_URL}/billing/success?session_id={CHECKOUT_SESSION_ID}`
+  subscription_data: {
+    metadata: {
+      userId: user._id.toString()
+    }
+  },
 
-  });
+  return_url: `${process.env.CLIENT_URL}/billing/success?session_id={CHECKOUT_SESSION_ID}`
+
+});
 
   res.json({
     clientSecret: session.client_secret

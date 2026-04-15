@@ -1,4 +1,3 @@
-// In models/tokenTransactionModel.js
 import mongoose from "mongoose";
 
 const tokenTransactionSchema = new mongoose.Schema({
@@ -14,8 +13,7 @@ const tokenTransactionSchema = new mongoose.Schema({
   },
   note: String,
   invoiceId: { 
-    type: String, 
-    unique: true, 
+    type: String,
     sparse: true 
   },
   createdAt: { 
@@ -24,7 +22,10 @@ const tokenTransactionSchema = new mongoose.Schema({
   }
 });
 
-// Compound index for idempotency
-tokenTransactionSchema.index({ user: 1, invoiceId: 1, type: 1 });
+// ✅ Proper idempotency
+tokenTransactionSchema.index(
+  { user: 1, invoiceId: 1, type: 1 },
+  { unique: true }
+);
 
 export default mongoose.model("TokenTransaction", tokenTransactionSchema);

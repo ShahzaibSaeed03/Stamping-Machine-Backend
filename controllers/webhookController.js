@@ -168,6 +168,7 @@ export const stripeWebhook = async (req, res) => {
           }
 
           user.subscriptionStatus = "active";
+          user.autoRenew = true;
 
           if (startDate) user.subscriptionStart = startDate;
           if (endDate) user.subscriptionEnd = endDate;

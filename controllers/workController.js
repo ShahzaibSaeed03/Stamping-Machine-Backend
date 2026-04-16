@@ -309,8 +309,7 @@ const getWorksByUser = asyncHandler(async (req, res) => {
         referenceNumber: work.displayed_ID,
         registrationDateFormatted: formatDateForCertificate(work.registeration_date),
 
-        timestampAuthority: work.id_certificate?.TSA || "OpenTimestamps",
-
+        timestampAuthority: "OpenTimestamps",
         fingerprint: work.file_fingerprint,
 
         /* FILE LINKS */

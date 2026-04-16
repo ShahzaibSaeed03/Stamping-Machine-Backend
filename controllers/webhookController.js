@@ -216,8 +216,9 @@ export const stripeWebhook = async (req, res) => {
 
         if (user) {
           user.subscriptionStatus = "canceled";
+          user.autoRenew = false;
           await user.save();
-
+           
           console.log("⚠️ Subscription canceled:", user.email);
         }
 
